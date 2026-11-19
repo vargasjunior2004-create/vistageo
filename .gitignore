@@ -1,0 +1,12 @@
+/dataAntigua/
+/fotografias-historicas-optimizadas/
+/rea/
+/spec-kit/
+/.mcp.json
+/.vscode/
+
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key

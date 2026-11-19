@@ -1,0 +1,11 @@
+{
+  "name": "VISTA GEO",
+  "short_name": "VISTA GEO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#102c50",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
