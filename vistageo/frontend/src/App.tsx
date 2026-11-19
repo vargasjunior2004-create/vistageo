@@ -11,6 +11,7 @@ import { RolesPage } from './pages/RolesPage'
 import { SourcesPage } from './pages/SourcesPage'
 import { UsersPage } from './pages/UsersPage'
 import { FieldLocationPage } from './pages/FieldLocationPage'
+import { LocationSearchPage } from './pages/LocationSearchPage'
 import { JornadaPage } from './pages/JornadaPage'
 
 function LocalJornada({ mode }: { mode: 'camera' | 'gallery' }) {
@@ -49,8 +50,8 @@ export default function App() {
                     <Route path="/roles" element={<RolesPage />} />
                     <Route path="/contratos" element={<ContractsPage />} />
                     <Route path="/ubicaciones" element={<LocationsPage />} />
-                    <Route path="/registrar-ubicacion" element={<FieldLocationPage mode="register" />} />
-                    <Route path="/consultar-ubicacion" element={<FieldLocationPage mode="search" />} />
+                    <Route path="/registrar-ubicacion" element={<FieldLocationPage />} />
+                    <Route path="/consultar-ubicacion" element={<LocationSearchPage />} />
                     <Route path="/procedencia" element={<SourcesPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>

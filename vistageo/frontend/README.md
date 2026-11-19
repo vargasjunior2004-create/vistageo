@@ -55,6 +55,11 @@ datos automáticamente.
   La fotografía oficial y el GPS se guardan mediante el backend. Si falla la
   conexión, se conserva un borrador local por usuario para reintentar con la
   misma operación; descartarlo puede requerir revisión manual en el servidor.
+- Consultar ubicación busca automáticamente por una parte literal o por todo
+  el kardex, sin distinguir mayúsculas y sin modificar espacios. Las
+  coincidencias se cargan al desplazarse y cada una abre su ficha; las fotos
+  se solicitan solo al acercarse a los resultados visibles. Kardex que solo
+  difieren por mayúsculas siguen siendo registros independientes.
 - Las fotos de jornada permanecen en IndexedDB de este navegador: no se envían
   al backend ni a Supabase. Tras iniciar sesión una vez con un rol habilitado y
   cargar la aplicación de producción, la cámara y galería pueden abrirse sin

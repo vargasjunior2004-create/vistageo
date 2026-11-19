@@ -5,31 +5,15 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { CameraInput } from '../components/CameraInput'
 import { Input } from '../components/Input'
-import { LocationPhoto } from '../components/LocationPhoto'
 import { deleteDraft, getDraft, saveDraft, type LocationDraft } from '../services/localPhotos'
 import { encodeOfficialPhoto } from '../services/officialPhoto'
-import type { Contract, Location, LocationRevision } from '../types/api'
+import type { Contract, Location } from '../types/api'
 
-function mapsLink(revision: LocationRevision | null): string | null {
-  if (!revision) return null
-  if (revision.latitud !== null && revision.longitud !== null) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${revision.latitud},${revision.longitud}`)}`
-  }
-  if (!revision.url_gps) return null
-  try {
-    const url = new URL(revision.url_gps)
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null
-  } catch {
-    return null
-  }
-}
-
-export function FieldLocationPage({ mode }: { mode: 'register' | 'search' }) {
+export function FieldLocationPage() {
   const { user, hasPermission } = useAuth()
   const [kardex, setKardex] = useState('')
   const [checked, setChecked] = useState<string | null>(null)
   const [location, setLocation] = useState<Location | null>(null)
-  const [revision, setRevision] = useState<LocationRevision | null>(null)
   const [contractExists, setContractExists] = useState(false)
   const [photo, setPhoto] = useState('')
   const [position, setPosition] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null)
@@ -37,13 +21,12 @@ export function FieldLocationPage({ mode }: { mode: 'register' | 'search' }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  const permission = mode === 'register' ? 'ubicaciones.registrar' : 'ubicaciones.consultar'
 
   useEffect(() => {
-    if (mode !== 'register' || !user) return
+    if (!user) return
     getDraft(user.id).then((value) => setDraft(value ?? null))
       .catch((err: Error) => setError(err.message))
-  }, [mode, user])
+  }, [user])
 
   const search = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -51,7 +34,6 @@ export function FieldLocationPage({ mode }: { mode: 'register' | 'search' }) {
     setMessage('')
     setChecked(null)
     setLocation(null)
-    setRevision(null)
     setBusy(true)
     try {
       const params = new URLSearchParams({ kardex })
@@ -63,10 +45,6 @@ export function FieldLocationPage({ mode }: { mode: 'register' | 'search' }) {
       setLocation(found)
       setContractExists(contracts.length > 0)
       setChecked(kardex)
-      if (mode === 'search' && found?.revision_actual_id !== null && found) {
-        const revisions = await apiRequest<LocationRevision[]>(`/ubicaciones/${found.id}/revisiones?revision_id=${found.revision_actual_id}`)
-        setRevision(revisions.find((item) => item.id === found.revision_actual_id) ?? null)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo consultar el kardex.')
     } finally {
@@ -145,19 +123,18 @@ export function FieldLocationPage({ mode }: { mode: 'register' | 'search' }) {
     }
   }
 
-  if (!hasPermission(permission)) return <p>No tienes permiso para esta función.</p>
-  const link = mapsLink(revision)
+  if (!hasPermission('ubicaciones.registrar')) return <p>No tienes permiso para esta función.</p>
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <Link to="/" className="text-sm font-semibold text-blue-700">← Volver al panel</Link>
       <div className="rounded-3xl bg-[#102c50] p-6 text-white">
         <p className="text-sm text-blue-200">VISTA GEO · Ubicación oficial</p>
-        <h1 className="mt-1 text-2xl font-bold">{mode === 'register' ? 'Registrar ubicación' : 'Consultar ubicación'}</h1>
+        <h1 className="mt-1 text-2xl font-bold">Registrar ubicación</h1>
       </div>
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
       {message && <p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-800">{message}</p>}
-      {draft && mode === 'register' ? (
+      {draft ? (
         <div className="space-y-3 rounded-2xl bg-amber-50 p-5">
           <p>Hay un registro pendiente para <strong>{draft.kardex}</strong>. Reintenta con los mismos datos.</p>
           <Button type="button" disabled={busy} onClick={() => void submitDraft(draft)}>Reintentar registro</Button>
@@ -176,20 +153,16 @@ export function FieldLocationPage({ mode }: { mode: 'register' | 'search' }) {
       )}
       {!draft && checked !== null && !location && (
         <p className="rounded-xl bg-blue-50 p-4 text-blue-900">
-          {mode === 'register' ? (contractExists ? 'Contrato encontrado. Puedes registrar su ubicación.' : 'Contrato nuevo: se creará al confirmar.') : 'No se encontró una ubicación para este kardex.'}
+          {contractExists ? 'Contrato encontrado. Puedes registrar su ubicación.' : 'Contrato nuevo: se creará al confirmar.'}
         </p>
       )}
       {!draft && location && (
         <div className="space-y-3 rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="font-semibold">Kardex: {location.kardex}</h2>
-          {mode === 'register' ? <p>Este kardex ya tiene una ubicación. No se creará un duplicado.</p> : <>
-            <LocationPhoto key={location.id} locationId={location.id} />
-            {revision ? <p className="text-sm">{revision.latitud ?? '—'}, {revision.longitud ?? '—'}</p> : <p>No hay coordenadas o enlace GPS vigente.</p>}
-            {link && <a className="inline-block rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a>}
-          </>}
+          <p>Este kardex ya tiene una ubicación. No se creará un duplicado.</p>
         </div>
       )}
-      {mode === 'register' && !draft && checked !== null && !location && (
+      {!draft && checked !== null && !location && (
         <div className="space-y-4 rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="font-semibold">Fachada y ubicación GPS</h2>
           <CameraInput disabled={busy} onPhoto={(file) => void capture(file)} />

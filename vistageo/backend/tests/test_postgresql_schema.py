@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import create_database_engine, get_db
 from app.inventario_historico import save_inventory
-from app.main import app
+from app.main import app, list_locations
 from app.migrar_kardex import MigrationPlan, save_plan
 from app.migrar_ubicaciones import LocationPlan, save_plan as save_location_plan
 from app.migrar_fotografias import Photo, import_photo
@@ -125,6 +125,24 @@ def test_kardex_exactos_y_procedencia(db):
     rejected(db, "UPDATE procedencia_historica SET kardex='inexistente' WHERE id=:id", {"id": source_id})
     rejected(db, "UPDATE procedencia_historica SET sha256='no-valido' WHERE id=:id", {"id": source_id})
     db.execute(text("UPDATE procedencia_historica SET kardex='123' WHERE id=:id"), {"id": source_id})
+
+
+def test_busqueda_parcial_en_postgresql_preserva_kardex_y_compara_unicode(db):
+    actor_id = create_user(db, "ADMINISTRADOR")
+    for kardex in ("Áb-1", "áb-1 ", "Ab-1", "X%_/-Y", "Xabc-Y"):
+        create_location(db, kardex)
+    factory = sessionmaker(bind=db, expire_on_commit=False, join_transaction_mode="create_savepoint")
+    with factory() as session:
+        actor = session.get(User, actor_id)
+        search = lambda value: list_locations(
+            kardex=None, limit=100, offset=0, actor=actor, db=session, kardex_contiene=value
+        )
+        assert [row.kardex for row in search("ÁB-1")] == ["Áb-1", "áb-1 "]
+        assert [row.kardex for row in search("%_/")] == ["X%_/-Y"]
+        assert [row.kardex for row in search("1 ")] == ["áb-1 "]
+        assert [row.kardex for row in list_locations(
+            kardex="Áb-1", limit=100, offset=0, actor=actor, db=session
+        )] == ["Áb-1"]
 
 
 def test_revision_actual_y_coordenadas(db):

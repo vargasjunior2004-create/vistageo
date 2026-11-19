@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiPhoto } from '../api/client'
 
-export function LocationPhoto({ locationId }: { locationId: number }) {
+export function LocationPhoto({ locationId, thumbnail = false }: { locationId: number; thumbnail?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
   const [message, setMessage] = useState('Cargando fotografía...')
 
@@ -31,6 +31,6 @@ export function LocationPhoto({ locationId }: { locationId: number }) {
   }, [locationId])
 
   return url
-    ? <img src={url} alt="Fachada del contrato seleccionado" className="max-h-96 rounded-xl object-contain" />
-    : <p className="text-sm text-slate-500">{message}</p>
+    ? <img src={url} alt="Fachada del contrato seleccionado" className={thumbnail ? 'h-20 w-20 rounded-xl object-cover' : 'max-h-96 rounded-xl object-contain'} />
+    : <span className={thumbnail ? 'block w-20 text-xs text-slate-500' : 'block text-sm text-slate-500'}>{message}</span>
 }

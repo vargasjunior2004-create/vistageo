@@ -214,7 +214,7 @@ despliegue.
 | GET | `/permisos` | Consultar el catálogo de permisos del módulo. |
 | PUT | `/roles/{id}/permisos` | Reemplazar los permisos de un rol. |
 | GET, POST | `/contratos` | Listar, buscar por kardex exacto o registrar un contrato confirmado. |
-| GET, POST | `/ubicaciones` | Listar o buscar por kardex exacto y crear la ubicación de un contrato confirmado. |
+| GET, POST | `/ubicaciones` | Listar o buscar por kardex exacto o parcial y crear la ubicación de un contrato confirmado. |
 | GET | `/ubicaciones/{id}` | Consultar una ubicación. |
 | POST | `/registro-ubicacion` | Crear contrato si falta, ubicación, revisión y fotografía oficial mediante operación idempotente. |
 | GET | `/ubicaciones/{id}/fotografia` | Descargar la foto privada vigente con permiso de consulta. |
@@ -227,6 +227,13 @@ La consulta de contratos y ubicaciones requiere `ubicaciones.consultar`;
 duplicados y registrar una ubicación oficial. La gestión histórica y los
 endpoints individuales de creación y edición siguen siendo de administrador.
 El kardex se conserva exactamente; se rechazan duplicados exactos.
+`GET /ubicaciones?kardex_contiene=texto` busca una parte literal sin distinguir
+mayúsculas de minúsculas; los espacios y caracteres `%`, `_` y `/` son
+literales. No se puede combinar con `kardex`, que continúa siendo exacto.
+La búsqueda parcial exige `ubicaciones.consultar` y devuelve páginas por ID
+con `limit` y `offset`. En PostgreSQL utiliza la colación ICU `und-x-icu`,
+que debe estar disponible; SQLite de pruebas solo compara letras ASCII sin
+distinguir mayúsculas.
 La nueva revisión se cierra y se
 convierte en vigente dentro de la misma transacción; las anteriores se
 conservan. Las listas admiten `limit` (máximo 500) y `offset`.

@@ -26,6 +26,19 @@ foto de fachada y coordenadas válidas. Las fotos y revisiones anteriores no
 se sobrescriben. El servidor autoriza, valida, audita y coordina las operaciones
 de Storage con PostgreSQL, incluyendo fallos y reintentos.
 
+### Consulta dinámica por kardex
+
+La consulta busca automáticamente el texto literal escrito en cualquier parte
+del kardex, sin distinguir mayúsculas y minúsculas y sin alterar los espacios
+ni el identificador original. Kardex diferentes siguen siendo registros
+distintos, incluso cuando coinciden al buscar. Se puede escribir el kardex
+completo en el mismo campo. Se muestran coincidencias paginadas al desplazarse,
+con fotografía si existe e identificación de la ubicación; al seleccionar una
+se abre su ficha. La interfaz indica carga, ausencia de resultados y errores,
+limita las solicitudes mientras se escribe y descarta respuestas obsoletas.
+La consulta parcial y las fotografías requieren `ubicaciones.consultar`; la
+consulta exacta necesaria para registrar conserva sus permisos actuales.
+
 ## Jornada local y conectividad
 
 Las imágenes de jornada se capturan, consultan, seleccionan, eliminan y
@@ -46,3 +59,5 @@ de fallos de Storage, auditoría, captura y errores de GPS, persistencia y
 borrado local, selector de compartir, funcionamiento sin conexión tras la
 preparación inicial y ausencia de cargas de fotos de jornada. Utilizar
 servicios simulados y PostgreSQL desechable; nunca datos de producción.
+Verificar también coincidencias parciales literales, mayúsculas y minúsculas,
+paginación, permisos y descarte de respuestas anteriores en el buscador.

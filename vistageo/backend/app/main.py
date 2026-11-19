@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select, update
+from sqlalchemy import func, literal, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload
 
@@ -366,15 +366,29 @@ def list_locations(
     offset: int = Query(default=0, ge=0),
     actor: User = Depends(current_user),
     db: Session = Depends(get_db),
+    kardex_contiene: str | None = None,
 ) -> list[Location]:
-    if kardex is not None and actor.role.name != ADMIN and "ubicaciones.consultar" not in {p.name for p in actor.role.permissions}:
+    if kardex is not None and kardex_contiene is None and actor.role.name != ADMIN and "ubicaciones.consultar" not in {p.name for p in actor.role.permissions}:
         require_permission(actor, "ubicaciones.registrar")
     else:
         require_permission(actor, "ubicaciones.consultar")
+    if kardex is not None and kardex_contiene is not None:
+        raise HTTPException(status_code=422, detail="Usa solo un filtro de kardex")
     query = select(Location).order_by(Location.id).limit(limit).offset(offset)
     if kardex is not None:
         validate_kardex_query(kardex)
         query = query.where(Location.kardex == kardex)
+    if kardex_contiene is not None:
+        validate_kardex_query(kardex_contiene)
+        if not kardex_contiene:
+            raise HTTPException(status_code=422, detail="Ingresa una parte del kardex")
+        if db.get_bind().dialect.name == "postgresql":
+            # La colación ICU permite comparar Unicode sin alterar la identidad exacta del kardex.
+            search_column = func.lower(Location.kardex.collate("und-x-icu"))
+            search_text = func.lower(literal(kardex_contiene).collate("und-x-icu"))
+            query = query.where(func.strpos(search_column, search_text) > 0)
+        else:
+            query = query.where(Location.kardex.icontains(kardex_contiene, autoescape=True))
     return list(db.scalars(query).all())
 
 

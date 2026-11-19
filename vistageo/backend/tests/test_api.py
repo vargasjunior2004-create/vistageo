@@ -471,6 +471,43 @@ def test_contratos_respetan_kardex_y_solo_administrador(api):
         assert len(db.scalars(select(AuditRecord).where(AuditRecord.accion == "CREAR_CONTRATO")).all()) == 4
 
 
+def test_busqueda_parcial_literal_paginada_y_permisos(api):
+    client, factory = api
+    names = ["Ab-1", "ab-1 ", "X%_/-Y", "Xabc-Y"] + [f"abc-{n:03}" for n in range(35)]
+    with factory() as db:
+        db.add_all([Contract(kardex=name) for name in names])
+        db.flush()
+        db.add_all([Location(kardex=name) for name in names])
+        db.scalar(select(Role).where(Role.name == "TECNICO")).permissions = [
+            db.scalar(select(Permission).where(Permission.name == "ubicaciones.registrar"))
+        ]
+        db.scalar(select(Role).where(Role.name == "GERENTE")).permissions = [
+            db.scalar(select(Permission).where(Permission.name == "ubicaciones.consultar"))
+        ]
+        db.commit()
+    tech = headers(client, "tech", "testpass3")
+    manager = headers(client, "manager", "testpass2")
+    assert client.get("/ubicaciones", params={"kardex_contiene": "ab"}).status_code == 401
+    assert client.get("/ubicaciones", headers=tech, params={"kardex": "Ab-1"}).json()[0]["kardex"] == "Ab-1"
+    assert client.get("/ubicaciones", headers=tech, params={"kardex_contiene": "ab"}).status_code == 403
+    assert client.get("/ubicaciones", headers=tech, params={"kardex": "Ab-1", "kardex_contiene": "ab"}).status_code == 403
+    for query in ("%_", "_/", "/", "%"):
+        result = client.get("/ubicaciones", headers=manager, params={"kardex_contiene": query})
+        assert result.status_code == 200
+        assert [row["kardex"] for row in result.json()] == ["X%_/-Y"]
+    result = client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "B-1"})
+    assert [row["kardex"] for row in result.json()] == ["Ab-1", "ab-1 "]
+    assert [row["kardex"] for row in client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "1 "}).json()] == ["ab-1 "]
+    assert client.get("/ubicaciones", headers=manager, params={"kardex": "ab-1"}).json() == []
+    assert client.get("/ubicaciones", headers=manager, params={"kardex_contiene": ""}).status_code == 422
+    assert client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "a\x00"}).status_code == 422
+    assert client.get("/ubicaciones", headers=manager, params={"kardex": "Ab-1", "kardex_contiene": "ab"}).status_code == 422
+    first = client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "ABC-0", "limit": 25, "offset": 0}).json()
+    second = client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "ABC-0", "limit": 25, "offset": 25}).json()
+    assert len(first) == 25 and len(second) == 10
+    assert [row["kardex"] for row in first + second] == names[4:]
+
+
 def test_ubicaciones_guardan_historial_y_auditoria(api):
     client, factory = api
     admin = headers(client)
