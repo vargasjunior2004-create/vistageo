@@ -164,6 +164,7 @@ class LocationRead(BaseModel):
     revision_actual_id: int | None
     creado_en: datetime | None = None
     creado_por_nombre: str | None = None
+    registro_pendiente: bool | None = None
 
 
 class LocationRevisionCreate(RequestModel):

@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload
 
 from app.database import get_db
-from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, Photograph, Role, User, as_utc, now_utc
+from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, User, as_utc, now_utc
 from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RoleCreate, SessionUserRead, UserCreate, UserRead, UserUpdate
 from app.fotografia import photo_version, recovery_loop, replace_photo
 from app.registro_ubicacion import register_location
@@ -411,10 +411,20 @@ def list_locations(
         else:
             query = query.where(Location.kardex.icontains(kardex_contiene, autoescape=True))
     locations = db.scalars(query).all()
-    if can_consult:
-        return [LocationRead.model_validate(location) for location in locations]
-    return [LocationRead(id=location.id, kardex=location.kardex, revision_actual_id=location.revision_actual_id)
-            for location in locations]
+    pending_ids = set(db.scalars(select(PhotoOperation.ubicacion_id).where(
+        PhotoOperation.ubicacion_id.in_([location.id for location in locations]),
+        PhotoOperation.tipo == "CREAR",
+        PhotoOperation.estado.in_(("preparada", "objeto_listo", "pendiente_limpieza")),
+    )).all()) if locations else set()
+    result = []
+    for location in locations:
+        if can_consult:
+            row = LocationRead.model_validate(location)
+        else:
+            row = LocationRead(id=location.id, kardex=location.kardex, revision_actual_id=location.revision_actual_id)
+        row.registro_pendiente = location.id in pending_ids
+        result.append(row)
+    return result
 
 
 @app.get("/ubicaciones/{location_id}", response_model=LocationRead)

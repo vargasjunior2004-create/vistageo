@@ -127,6 +127,13 @@ servidor; no se atribuyen usuarios ni fechas originales desconocidas a las
 importaciones históricas. El nombre mostrado corresponde al nombre actual
 de la cuenta creadora.
 
+En las listas de ubicaciones, `registro_pendiente` indica una operación activa
+de creación de campo sin finalizar, incluida una que requiere revisión. La
+comprobación exacta disponible a quien solo puede registrar también devuelve
+ese indicador, sin revelar el creador ni la fecha. No indica que los registros
+históricos sin foto o GPS estén pendientes. En otros endpoints el campo es
+`null` porque no se consulta ese estado.
+
 Las claves primarias y restricciones únicas indexan kardex, la ubicación por
 contrato, la foto por ubicación, la clave de Storage y la idempotencia. El
 índice parcial de operaciones impide dos operaciones activas por ubicación;

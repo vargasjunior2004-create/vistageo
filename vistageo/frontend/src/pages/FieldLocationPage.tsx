@@ -168,7 +168,9 @@ export function FieldLocationPage() {
       {!draft && location && (
         <div className="space-y-3 rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="font-semibold">Kardex: {location.kardex}</h2>
-          {!message && <p>Este kardex ya tiene una ubicación. No se creará un duplicado.</p>}
+          {!message && (location.registro_pendiente
+            ? <p>Este registro está pendiente o requiere revisión. Si tienes el borrador original, reinténtalo; de lo contrario, contacta a un administrador.</p>
+            : <p>Este kardex ya tiene una ubicación. No se creará un duplicado.</p>)}
         </div>
       )}
       {!draft && checked !== null && !location && (

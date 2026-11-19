@@ -413,6 +413,16 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
         assert location is not None and location.revision_actual_id is None
         assert db.scalar(select(Photograph)) is None
         assert db.scalar(select(PhotoOperation)).estado == "preparada"
+        db.scalar(select(Role).where(Role.name == "GERENTE")).permissions = [
+            db.scalar(select(Permission).where(Permission.name == "ubicaciones.registrar"))
+        ]
+        db.commit()
+    register_only = headers(client, "manager", "testpass2")
+    pending = client.get("/ubicaciones", headers=register_only, params={"kardex": body["kardex"]}).json()[0]
+    assert pending["registro_pendiente"] is True
+    assert pending["creado_por_nombre"] is None and pending["creado_en"] is None
+    assert client.get("/ubicaciones", headers=register_only, params={"kardex_contiene": "aB"}).status_code == 403
+    assert client.get("/ubicaciones", headers=auth, params={"kardex_contiene": "aB"}).json()[0]["registro_pendiente"] is True
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "latitud": "0"}).status_code == 409
     response = client.post("/registro-ubicacion", headers=auth, json=body)
     assert response.status_code == 201
@@ -430,6 +440,7 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
         assert db.scalar(select(PhotoOperation)).estado == "finalizada"
     result = client.get("/ubicaciones", headers=auth, params={"kardex_contiene": "b-1"}).json()[0]
     assert result["kardex"] == "aB-1 " and result["creado_por_nombre"] == "TECH"
+    assert result["registro_pendiente"] is False
     assert result["creado_en"] == response.json()["creado_en"]
     assert client.get(f"/ubicaciones/{response.json()['id']}/fotografia", headers=auth).status_code == 200
     assert client.get("/usuarios", headers=auth).status_code == 403
@@ -737,6 +748,7 @@ def test_busqueda_parcial_literal_paginada_y_permisos(api):
     second = client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "ABC-0", "limit": 25, "offset": 25}).json()
     assert len(first) == 25 and len(second) == 10
     assert [row["kardex"] for row in first + second] == names[4:]
+    assert all(row["registro_pendiente"] is False for row in first + second)
 
 
 def test_ubicaciones_guardan_historial_y_auditoria(api):

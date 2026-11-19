@@ -34,6 +34,11 @@ function Highlight({ value, query }: { value: string; query: string }) {
   return <>{value.slice(0, index)}<mark className="rounded bg-amber-100 text-inherit">{value.slice(index, index + query.length)}</mark>{value.slice(index + query.length)}</>
 }
 
+function VisibleWhitespace({ value }: { value: string }) {
+  if (!/\s/.test(value)) return null
+  return <span className="mt-1 block break-all text-xs text-slate-600">Espacios visibles (␠): {JSON.stringify(value).replaceAll(' ', '␠')}</span>
+}
+
 function LazyPhoto({ locationId }: { locationId: number }) {
   const target = useRef<HTMLSpanElement>(null)
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
@@ -156,6 +161,7 @@ export function LocationSearchPage() {
           setError('')
           setSelected(null)
         }} />
+        <p className="mt-2 text-xs text-slate-600">Las mayúsculas y los espacios pueden distinguir kardex diferentes.</p>
       </div>
       {selected ? (
         <section ref={detail} tabIndex={-1} className="space-y-4 rounded-3xl bg-white p-5 shadow-sm outline-none">
@@ -163,9 +169,11 @@ export function LocationSearchPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Kardex · Ubicación #{selected.id}</p>
             <h2 className="mt-1 break-all whitespace-pre-wrap text-xl font-bold text-slate-900">{selected.kardex}</h2>
+            <VisibleWhitespace value={selected.kardex} />
             <p className="mt-2 text-sm text-slate-600">Registrado por: {selected.creado_por_nombre ?? 'Desconocido'}</p>
             <p className="text-sm text-slate-600">Fecha de registro: {selected.creado_en ? new Date(selected.creado_en).toLocaleString() : 'Desconocida'}</p>
           </div>
+          {selected.registro_pendiente && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Este registro está pendiente o requiere revisión. Contacta a un administrador si no tienes el borrador original.</p>}
           <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
           {user && hasPermission('ubicaciones.fotografia.editar') && <ReplaceLocationPhoto
             key={selected.id}
@@ -198,7 +206,9 @@ export function LocationSearchPage() {
                   <LazyPhoto locationId={location.id} />
                   <span className="min-w-0 flex-1">
                     <span className="block break-all whitespace-pre-wrap font-bold text-slate-900"><Highlight value={location.kardex} query={query} /></span>
+                    <VisibleWhitespace value={location.kardex} />
                     <span className="mt-1 block text-sm text-slate-600">Registrado por: {location.creado_por_nombre ?? 'Desconocido'}</span>
+                    {location.registro_pendiente && <span className="mt-1 block text-xs font-semibold text-amber-800">Registro pendiente o requiere revisión</span>}
                     <span className="mt-1 block text-xs text-slate-500">Ubicación #{location.id} · {location.revision_actual_id === null ? 'Sin revisión vigente' : 'Con revisión vigente'}</span>
                   </span>
                   <span aria-hidden="true" className="text-xl text-blue-700">›</span>

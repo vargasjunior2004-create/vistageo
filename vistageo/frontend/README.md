@@ -60,11 +60,16 @@ datos automáticamente.
 - El registro ofrece cámara o archivo, vista previa, enlace de Google Maps y
   resumen antes de confirmar. La verificación automática de kardex es exacta
   y no requiere consultar contratos desde el formulario.
+- Si un registro de campo quedó pendiente, el buscador y la comprobación
+  exacta lo indican. El borrador original permite reintentar; si se perdió,
+  hace falta revisión administrativa. Esto no identifica como pendientes las
+  ubicaciones históricas que carecen de foto o coordenadas.
 - Consultar ubicación busca automáticamente por una parte literal o por todo
   el kardex, sin distinguir mayúsculas y sin modificar espacios. Las
   coincidencias se cargan al desplazarse y cada una abre su ficha; las fotos
   se solicitan solo al acercarse a los resultados visibles. Kardex que solo
-  difieren por mayúsculas siguen siendo registros independientes.
+  difieren por mayúsculas siguen siendo registros independientes; los
+  espacios se muestran también con un marcador visible sin cambiar el kardex.
 - Los resultados y la ficha muestran el usuario creador; la ficha muestra
   también la fecha de creación. Si no se conoce alguno de esos datos se indica
   como desconocido. El nombre mostrado es el nombre actual de la cuenta.
