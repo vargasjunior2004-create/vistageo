@@ -151,6 +151,12 @@ class FieldLocationCreate(ContractCreate):
     fotografia_base64: str = Field(min_length=1, max_length=12 * 1024 * 1024)
 
 
+class PhotographReplace(RequestModel):
+    idempotencia: UUID
+    version: str = Field(pattern=r"^[0-9a-f]{64}$")
+    fotografia_base64: str = Field(min_length=1, max_length=12 * 1024 * 1024)
+
+
 class LocationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

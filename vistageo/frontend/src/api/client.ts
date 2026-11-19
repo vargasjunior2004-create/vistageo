@@ -65,7 +65,7 @@ export async function apiRequest<T = unknown>(path: string, options: RequestOpti
   return await response.json() as T
 }
 
-export async function apiPhoto(path: string, signal?: AbortSignal): Promise<Blob> {
+export async function apiPhoto(path: string, signal?: AbortSignal): Promise<{ blob: Blob; version: string | null }> {
   const response = await apiFetch(path, { signal })
-  return response.blob()
+  return { blob: await response.blob(), version: response.headers.get('X-Foto-Version') }
 }

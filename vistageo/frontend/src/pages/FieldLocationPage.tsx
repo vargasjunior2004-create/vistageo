@@ -7,6 +7,7 @@ import { CameraInput } from '../components/CameraInput'
 import { Input } from '../components/Input'
 import { deleteDraft, getDraft, saveDraft, type LocationDraft } from '../services/localPhotos'
 import { encodeOfficialPhoto } from '../services/officialPhoto'
+import { googleMapsLink } from '../services/maps'
 import type { Contract, Location } from '../types/api'
 
 export function FieldLocationPage() {
@@ -145,10 +146,10 @@ export function FieldLocationPage() {
         </div>
       ) : (
         <form onSubmit={search} className="flex flex-wrap items-end gap-3 rounded-3xl bg-white p-5 shadow-sm">
-          <div className="min-w-0 flex-1"><Input label="Kardex exacto" value={kardex} onChange={(event) => {
+          <div className="min-w-0 flex-1"><Input label="Kardex exacto" value={kardex} disabled={busy} onChange={(event) => {
             setKardex(event.target.value); setChecked(null); setLocation(null); setPosition(null); setPhoto('')
           }} required /></div>
-          <Button type="submit" disabled={busy}>Consultar</Button>
+          <Button type="submit" disabled={busy}>Verificar kardex</Button>
         </form>
       )}
       {!draft && checked !== null && !location && (
@@ -159,16 +160,23 @@ export function FieldLocationPage() {
       {!draft && location && (
         <div className="space-y-3 rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="font-semibold">Kardex: {location.kardex}</h2>
-          <p>Este kardex ya tiene una ubicación. No se creará un duplicado.</p>
+          {!message && <p>Este kardex ya tiene una ubicación. No se creará un duplicado.</p>}
         </div>
       )}
       {!draft && checked !== null && !location && (
         <div className="space-y-4 rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="font-semibold">Fachada y ubicación GPS</h2>
-          <CameraInput disabled={busy} onPhoto={(file) => void capture(file)} />
-          {photo && <img className="max-h-72 rounded-xl" src={`data:image/jpeg;base64,${photo}`} alt="Vista previa de fachada" />}
+          <CameraInput disabled={busy} allowGallery onPhoto={(file) => void capture(file)} />
           <div><Button type="button" variant="secondary" disabled={busy} onClick={locate}>Obtener GPS</Button></div>
-          {position && <p className="text-sm text-slate-600">{position.latitude}, {position.longitude} · Precisión aproximada: {Math.round(position.accuracy)} m</p>}
+          <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
+            <h3 className="font-semibold">Resumen antes de guardar</h3>
+            <p className="break-all whitespace-pre-wrap text-sm">Kardex: {kardex}</p>
+            {photo ? <img className="max-h-72 rounded-xl" src={`data:image/jpeg;base64,${photo}`} alt="Vista previa de fachada" /> : <p className="text-sm text-slate-600">Añade una foto de fachada.</p>}
+            {position ? <>
+              <p className="text-sm text-slate-600">{position.latitude}, {position.longitude} · Precisión aproximada: {Math.round(position.accuracy)} m</p>
+              <a className="block break-all text-sm text-blue-700 underline" href={googleMapsLink(position.latitude, position.longitude)} target="_blank" rel="noopener noreferrer">{googleMapsLink(position.latitude, position.longitude)}</a>
+            </> : <p className="text-sm text-slate-600">Obtén el GPS para completar la ubicación.</p>}
+          </div>
           <Button type="button" disabled={busy || !photo || !position} onClick={() => void register()}>Confirmar registro</Button>
         </div>
       )}

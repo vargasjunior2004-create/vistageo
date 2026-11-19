@@ -40,7 +40,10 @@ class Storage:
     def request(self, method: str, path: str, data: bytes | None = None) -> bytes | None:
         headers = {"apikey": self.key, "Authorization": f"Bearer {self.key}"}
         if data is not None:
-            headers.update({"Content-Type": "image/webp", "x-upsert": "false"})
+            if method == "DELETE":
+                headers["Content-Type"] = "application/json"
+            else:
+                headers.update({"Content-Type": "image/webp", "x-upsert": "false"})
         request = Request(self.origin + path, data=data, headers=headers, method=method)
         try:
             with self.opener.open(request, timeout=60) as response:
@@ -69,6 +72,9 @@ class Storage:
 
     def put(self, key: str, data: bytes) -> None:
         self.request("POST", f"/object/{BUCKET}/{quote(key, safe='/')}", data)
+
+    def delete(self, key: str) -> None:
+        self.request("DELETE", f"/object/{BUCKET}", json.dumps({"prefixes": [key]}).encode())
 
     def check_bucket(self, max_size: int) -> None:
         result = self.request("GET", f"/bucket/{BUCKET}")

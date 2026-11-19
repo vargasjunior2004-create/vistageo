@@ -55,11 +55,18 @@ datos automáticamente.
   La fotografía oficial y el GPS se guardan mediante el backend. Si falla la
   conexión, se conserva un borrador local por usuario para reintentar con la
   misma operación; descartarlo puede requerir revisión manual en el servidor.
+- El registro ofrece cámara o archivo, vista previa, enlace de Google Maps y
+  resumen antes de confirmar. La verificación de kardex es exacta.
 - Consultar ubicación busca automáticamente por una parte literal o por todo
   el kardex, sin distinguir mayúsculas y sin modificar espacios. Las
   coincidencias se cargan al desplazarse y cada una abre su ficha; las fotos
   se solicitan solo al acercarse a los resultados visibles. Kardex que solo
   difieren por mayúsculas siguen siendo registros independientes.
+- En la ficha se puede reemplazar una foto existente con los permisos de
+  consulta y edición. Tras confirmarlo, la copia anterior se elimina
+  definitivamente, también si es histórica. Si falla la limpieza, se informa
+  como pendiente; el borrador conserva la operación para reintentar desde el
+  mismo dispositivo. El navegador no guarda las claves de Supabase.
 - Las fotos de jornada permanecen en IndexedDB de este navegador: no se envían
   al backend ni a Supabase. Tras iniciar sesión una vez con un rol habilitado y
   cargar la aplicación de producción, la cámara y galería pueden abrirse sin
@@ -75,5 +82,6 @@ datos automáticamente.
   solo se registra en producción y guarda recursos estáticos, no respuestas
   privadas de la API. Comprueba el funcionamiento offline en el dispositivo
   después de visitar la aplicación con conexión.
-- Antes de desplegar el panel hay que revisar y autorizar por separado la
-  revisión de permisos `0005` en la base de destino; el despliegue no la aplica.
+- Antes de habilitar las funciones en una base existente hay que revisar y
+  autorizar por separado las revisiones de permisos `0005` y `0006`, según el
+  estado de esa base; el despliegue no las aplica.

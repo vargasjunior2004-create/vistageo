@@ -1,7 +1,9 @@
+import asyncio
 import hashlib
 import logging
 import os
 import secrets
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -15,19 +17,35 @@ from sqlalchemy.orm import Session, lazyload
 
 from app.database import get_db
 from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, Photograph, Role, User, as_utc, now_utc
-from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, RoleCreate, SessionUserRead, UserCreate, UserRead, UserUpdate
+from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RoleCreate, SessionUserRead, UserCreate, UserRead, UserUpdate
+from app.fotografia import photo_version, recovery_loop, replace_photo
 from app.registro_ubicacion import register_location
 from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, PERMISSIONS, PERMISSION_MANAGERS, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, token_hash, verify_password
 from app.storage import BUCKET, Storage
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False, interpolate=False)
-app = FastAPI(title="GEO VISTA: usuarios y roles")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    task = None
+    if os.environ.get("VISTAGEO_PHOTO_CLEANUP_ENABLED") == "true":
+        task = asyncio.create_task(recovery_loop())
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
+app = FastAPI(title="GEO VISTA: usuarios y roles", lifespan=lifespan)
 origins = [origin.strip() for origin in os.environ.get("CORS_ORIGINS", "").split(",") if origin.strip()]
 if "*" in origins:
     raise RuntimeError("CORS_ORIGINS requiere orígenes explícitos")
 app.add_middleware(
     CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-Actividad-Usuario"],
+    expose_headers=["X-Foto-Version"],
 )
 logger = logging.getLogger(__name__)
 
@@ -420,7 +438,24 @@ def read_location_photo(location_id: int, actor: User = Depends(current_user), d
     if not content or (photo.sha256 and hashlib.sha256(content).hexdigest() != photo.sha256):
         logger.error("Fotografía %s ausente o con huella incorrecta en Storage", photo.id)
         raise HTTPException(status_code=502, detail="Fotografía no disponible")
-    return Response(content, media_type="image/webp", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+    return Response(content, media_type="image/webp", headers={
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+        "X-Foto-Version": photo_version(photo.id, photo.storage_bucket, photo.storage_clave),
+    })
+
+
+@app.put("/ubicaciones/{location_id}/fotografia")
+def update_location_photo(
+    location_id: int, data: PhotographReplace, actor: User = Depends(current_user), db: Session = Depends(get_db),
+) -> dict[str, str]:
+    require_permission(actor, "ubicaciones.consultar")
+    require_permission(actor, "ubicaciones.fotografia.editar")
+    try:
+        storage = Storage()
+    except RuntimeError as exc:
+        logger.error("Storage no está disponible: %s", exc)
+        raise HTTPException(status_code=503, detail="No se pudo preparar Storage") from exc
+    return {"estado": replace_photo(location_id, data, actor, db, storage)}
 
 
 @app.get("/ubicaciones/{location_id}/revisiones", response_model=list[LocationRevisionRead])

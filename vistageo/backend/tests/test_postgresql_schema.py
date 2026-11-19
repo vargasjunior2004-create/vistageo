@@ -16,6 +16,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 
 from app.database import create_database_engine, get_db
+from app.fotografia import photo_version, replace_photo
 from app.inventario_historico import save_inventory
 from app.main import app, list_locations
 from app.migrar_kardex import MigrationPlan, save_plan
@@ -23,7 +24,7 @@ from app.migrar_ubicaciones import LocationPlan, save_plan as save_location_plan
 from app.migrar_fotografias import Photo, import_photo
 from app.models import User
 from app.registro_ubicacion import register_location
-from app.schemas import FieldLocationCreate
+from app.schemas import FieldLocationCreate, PhotographReplace
 from app.security import password_hash
 
 
@@ -106,6 +107,26 @@ def test_permisos_panel_migracion_con_roles_existentes(db):
     assert ("TECNICO", "roles.consultar") in assigned
     assert ("TECNICO", "usuarios.gestionar") not in assigned
     assert not any(role == "JEFE TECNICO" for role, _ in assigned)
+
+
+def test_migracion_permiso_edicion_fotos_preserva_asignaciones(db):
+    roles = ("TECNICO", "GERENTE", "JEFE COMERCIAL", "JEFE OPERATIVO", "JEFE TECNICO", "CAJERO", "CALL CENTER")
+    for role in roles:
+        db.execute(text("INSERT INTO roles (nombre) VALUES (:name) ON CONFLICT DO NOTHING"), {"name": role})
+    for permission in ("ubicaciones.consultar", "ubicaciones.fotografia.editar"):
+        db.execute(text("INSERT INTO permisos (nombre) VALUES (:name) ON CONFLICT DO NOTHING"), {"name": permission})
+    migration = runpy.run_path(str(Path(__file__).parents[1] / "alembic/versions/0006_photo_edit_permission.py"))
+    with Operations.context(MigrationContext.configure(db)):
+        migration["upgrade"]()
+        migration["upgrade"]()
+    rows = db.execute(text("""
+        SELECT roles.nombre, permisos.nombre FROM rol_permisos
+        JOIN roles ON roles.id=rol_permisos.rol_id
+        JOIN permisos ON permisos.id=rol_permisos.permiso_id
+    """)).all()
+    for role in roles:
+        assert (role, "ubicaciones.consultar") in rows
+        assert (role, "ubicaciones.fotografia.editar") in rows
 
 
 def test_kardex_exactos_y_procedencia(db):
@@ -244,6 +265,53 @@ def test_foto_historica_exige_procedencia_y_modificaciones_exigen_actor(db):
     rejected(db, "UPDATE fotografias SET sha256_original=NULL WHERE id=:id", {"id": photo})
     db.execute(text("UPDATE fotografias SET storage_clave='otro' WHERE id=:id"), {"id": photo})
     assert db.execute(text("SELECT actualizado_por FROM fotografias WHERE id=:id"), {"id": photo}).scalar_one() == user
+
+
+def test_reemplazo_historico_preserva_procedencia_y_audita(db):
+    actor_id = create_user(db, "ADMINISTRADOR")
+    location_id = create_location(db, "historico-reemplazo")
+    original_sha = "a" * 64
+    old_content = b"foto anterior"
+    old_sha = hashlib.sha256(old_content).hexdigest()
+    source_id = db.execute(text("""
+        INSERT INTO procedencia_historica (ruta_original, tipo, sha256, estado_revision, kardex)
+        VALUES ('prueba/fachada.jpg', 'imagen', :sha, 'CONFIRMADO', 'historico-reemplazo') RETURNING id
+    """), {"sha": original_sha}).scalar_one()
+    photo_id = db.execute(text("""
+        INSERT INTO fotografias (ubicacion_id, storage_bucket, storage_clave, sha256, sha256_original, procedencia_id)
+        VALUES (:location, 'fachada', 'historica.webp', :sha, :original, :source) RETURNING id
+    """), {"location": location_id, "sha": old_sha, "original": original_sha, "source": source_id}).scalar_one()
+    objects = {"historica.webp": old_content}
+
+    class FakeStorage:
+        def get(self, key):
+            return objects.get(key)
+
+        def put(self, key, content):
+            objects[key] = content
+
+        def delete(self, key):
+            objects.pop(key, None)
+
+    image = io.BytesIO()
+    Image.new("RGB", (10, 10), "green").save(image, format="JPEG")
+    data = PhotographReplace(idempotencia=uuid4(), version=photo_version(photo_id, "fachada", "historica.webp"),
+                             fotografia_base64=base64.b64encode(image.getvalue()).decode())
+    factory = sessionmaker(bind=db, expire_on_commit=False, join_transaction_mode="create_savepoint")
+    with factory() as session:
+        actor = session.get(User, actor_id)
+        assert replace_photo(location_id, data, actor, session, FakeStorage()) == "finalizada"
+    row = db.execute(text("""
+        SELECT storage_clave, sha256, sha256_original, procedencia_id, actualizado_por
+        FROM fotografias WHERE id=:id
+    """), {"id": photo_id}).one()
+    assert row.sha256_original == original_sha and row.procedencia_id == source_id and row.actualizado_por == actor_id
+    assert row.storage_clave in objects and row.sha256 == hashlib.sha256(objects[row.storage_clave]).hexdigest()
+    assert "historica.webp" not in objects
+    events = db.execute(text("SELECT accion, detalles FROM auditoria WHERE ubicacion_id=:id"), {"id": location_id}).all()
+    assert "REEMPLAZAR_FOTOGRAFIA" in [event.accion for event in events]
+    audit = next(event for event in events if event.accion == "CONFIRMAR_REEMPLAZO_FOTOGRAFIA")
+    assert audit.detalles["sha256_anterior"] == old_sha and audit.detalles["sha256_nuevo"] == row.sha256
 
 
 def test_operacion_historica_solo_permita_creacion_con_procedencia(db):

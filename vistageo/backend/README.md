@@ -50,8 +50,10 @@ operador desconocido, procedencia confirmada y huellas original y optimizada.
 `0005_panel_permissions` añade permisos de ubicaciones y asignaciones iniciales
 para los roles existentes; también garantiza los permisos de usuarios
 necesarios para gerente y jefe comercial.
+`0006_photo_edit_permission` incorpora el permiso configurable de reemplazo de
+fotografía y su requisito de consulta para los roles aprobados.
 `sql/esquema_postgresql.sql` es la salida de `alembic upgrade head --sql` para
-una **base nueva y vacía**: incluye las cinco revisiones y `alembic_version`.
+una **base nueva y vacía**: incluye las seis revisiones y `alembic_version`.
 No ejecutar ese script sobre un esquema ya existente; para actualizar una
 instalación existente se utiliza Alembic desde su revisión actual, previa
 autorización y copia de seguridad. No ejecutar el SQL y Alembic como dos
@@ -119,8 +121,8 @@ verificar permisos en el backend. El contexto SQL no autentica por sí mismo:
 los permisos de conexión y las funciones privilegiadas deben impedir que
 clientes no confiables lo suplanten. La consulta de la foto oficial requiere
 `ubicaciones.consultar`; el registro inicial requiere `ubicaciones.registrar`.
-La sustitución y eliminación de fotografías oficiales no forman parte del
-panel y siguen pendientes de una API y una matriz de permisos específica.
+La sustitución requiere tanto `ubicaciones.consultar` como
+`ubicaciones.fotografia.editar`; no permite agregar una foto donde no existe.
 
 Storage y PostgreSQL no comparten transacciones. El importador histórico
 implementa la creación recuperable descrita más abajo. El registro de campo
@@ -128,16 +130,23 @@ también prepara una operación persistente, serializa los reintentos por
 operación, verifica la huella del objeto y solo entonces publica la foto y
 revisión. Las claves existentes nunca se sobrescriben. Un fallo deja la
 operación pendiente para reintentar con los mismos datos; si se descarta el
-borrador del navegador, puede ser necesaria una revisión manual. El futuro
-servicio de modificación debe serializar una operación por
-ubicación, subir y verificar el objeto nuevo antes de publicar su referencia,
-registrar cambios y estado de limpieza transaccionalmente y reintentar la
-eliminación de la clave exacta anterior. Ante fallo de carga o actualización
-debe conservarse la referencia vigente y limpiar el objeto nuevo huérfano;
-ante fallo de borrado debe persistir `pendiente_limpieza` y reintentarse.
-Antes de borrar un objeto el recuperador debe comprobar que no sea la
-referencia vigente. El borrado definitivo en Storage, la recuperación y los
-permisos son trabajo pendiente, no funciones de los triggers.
+borrador del navegador, puede ser necesaria una revisión manual. El reemplazo
+serializa operaciones por ubicación, comprueba la versión observada, sube y
+verifica una clave nueva, y publica la referencia y el estado de limpieza
+en una transacción. Antes de borrar la clave anterior comprueba que no sea una
+foto vigente y después verifica su ausencia. La operación y la auditoría
+conservan las referencias y huellas, pero la imagen anterior se elimina
+definitivamente, incluso si es una copia histórica. El RAR original y la
+procedencia no se modifican. Si falla el borrado se informa
+`pendiente_limpieza`, no un borrado exitoso.
+
+El contenedor activa `VISTAGEO_PHOTO_CLEANUP_ENABLED=true` para reintentar cada
+60 segundos los reemplazos pendientes mientras el servicio está en ejecución.
+En modo Python separado configurar esa variable explícitamente. Si el servicio
+está detenido, los reintentos se reanudan cuando vuelva a ejecutarse. También
+se puede reintentar desde el borrador del navegador con la misma operación.
+El recuperador no procesa operaciones de importación histórica ni elimina
+objetos cuyo uso como fotografía vigente encuentre en la base.
 
 ### Pruebas de PostgreSQL
 
@@ -218,6 +227,7 @@ despliegue.
 | GET | `/ubicaciones/{id}` | Consultar una ubicación. |
 | POST | `/registro-ubicacion` | Crear contrato si falta, ubicación, revisión y fotografía oficial mediante operación idempotente. |
 | GET | `/ubicaciones/{id}/fotografia` | Descargar la foto privada vigente con permiso de consulta. |
+| PUT | `/ubicaciones/{id}/fotografia` | Reemplazar solo una foto existente con permisos de consulta y edición. |
 | GET, POST | `/ubicaciones/{id}/revisiones` | Consultar el historial o registrar una revisión vigente. |
 | GET | `/procedencia`, `/procedencia/{id}` | Consultar el inventario histórico, solo como administrador. |
 | PUT, DELETE | `/procedencia/{id}/contrato` | Confirmar, corregir o retirar manualmente la asociación con un contrato. |
@@ -241,6 +251,12 @@ La foto se obtiene desde el servidor con `SUPABASE_URL` y
 `SUPABASE_SECRET_KEY`, sin compartir la clave ni hacer público el bucket.
 Si hay huella almacenada se verifica antes de entregar los bytes; una
 referencia rota o huella incorrecta devuelve error, no una foto inexistente.
+La respuesta de la foto incluye `X-Foto-Version`. Para reemplazarla, enviar
+`idempotencia` (UUID), `version` (cabecera recibida) y `fotografia_base64`
+al PUT; se rechazan otros campos. Una versión obsoleta devuelve 412 sin
+modificar la foto. Repetir la misma operación y datos permite recuperarse tras
+una interrupción. El estado `pendiente_limpieza` indica que la imagen nueva es
+vigente, pero la eliminación de la anterior aún no está confirmada.
 
 ## Conexión del frontend y Render
 
@@ -270,6 +286,8 @@ el frontend y la API desde el mismo origen, no se necesita configurar CORS;
 mantener orígenes anteriores únicamente si se pretende conservar acceso desde
 otro frontend. Para volver al modo separado, usar el runtime Python y la
 configuración siguiente.
+Antes de habilitar edición hay que revisar y autorizar por separado `0006`
+en la base de destino. El despliegue no aplica esa revisión.
 
 ### Dos servicios
 
@@ -420,13 +438,15 @@ el comando se detiene. No elimina objetos automáticamente; una limpieza
 pendiente requiere revisión y comprobación de que la clave no esté en uso.
 Los errores temporales de conexión se reintentan con esperas crecientes y un
 límite; si persisten, el comando informa el fallo y puede reanudarse después.
-Las modificaciones y eliminación de fotos existentes siguen pendientes.
+El importador no reemplaza fotos existentes; el flujo de reemplazo del panel
+es independiente del importador.
 
 No se eliminan roles desde la API; esto conserva sus referencias de auditoría.
 
 El catálogo comprende `usuarios.consultar`, `usuarios.gestionar`,
 `roles.consultar`, `roles.gestionar`, `ubicaciones.consultar` y
-`ubicaciones.registrar`. El administrador tiene todos ellos. La revisión
+`ubicaciones.registrar`, además de `ubicaciones.fotografia.editar`. El
+administrador tiene todos ellos. La revisión
 `0005` asigna los dos permisos de ubicaciones a los roles existentes
 `GERENTE`, `JEFE COMERCIAL`, `TECNICO`, `CAJERO` y `CALL CENTER`, y los dos
 de usuarios a `GERENTE` y `JEFE COMERCIAL`; conserva las demás asignaciones.

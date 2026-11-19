@@ -37,6 +37,8 @@ def main() -> None:
             names = set()
             if role.name in {"GERENTE", "JEFE COMERCIAL", "TECNICO", "CAJERO", "CALL CENTER"}:
                 names.update({"ubicaciones.consultar", "ubicaciones.registrar"})
+            if role.name in {"GERENTE", "JEFE COMERCIAL", "JEFE OPERATIVO", "JEFE TECNICO", "TECNICO", "CAJERO", "CALL CENTER"}:
+                names.update({"ubicaciones.consultar", "ubicaciones.fotografia.editar"})
             if role.name in {"GERENTE", "JEFE COMERCIAL"}:
                 names.update({"usuarios.consultar", "usuarios.gestionar"})
             if names:

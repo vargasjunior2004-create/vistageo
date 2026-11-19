@@ -5,6 +5,8 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { LocationPhoto } from '../components/LocationPhoto'
+import { ReplaceLocationPhoto } from '../components/ReplaceLocationPhoto'
+import { googleMapsLink } from '../services/maps'
 import type { Location, LocationRevision } from '../types/api'
 
 const PAGE_SIZE = 25
@@ -13,7 +15,7 @@ const DEBOUNCE_MS = 350
 function mapsLink(revision: LocationRevision | null): string | null {
   if (!revision) return null
   if (revision.latitud !== null && revision.longitud !== null) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${revision.latitud},${revision.longitud}`)}`
+    return googleMapsLink(revision.latitud, revision.longitud)
   }
   if (!revision.url_gps) return null
   try {
@@ -54,7 +56,7 @@ function LazyPhoto({ locationId }: { locationId: number }) {
 }
 
 export function LocationSearchPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, user } = useAuth()
   const allowed = hasPermission('ubicaciones.consultar')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
@@ -67,6 +69,8 @@ export function LocationSearchPage() {
   const [revision, setRevision] = useState<LocationRevision | null>(null)
   const [revisionLoading, setRevisionLoading] = useState(false)
   const [revisionError, setRevisionError] = useState('')
+  const [photoVersion, setPhotoVersion] = useState<string | null>(null)
+  const [photoRevision, setPhotoRevision] = useState(0)
   const controllerRef = useRef<AbortController | null>(null)
   const sentinel = useRef<HTMLDivElement>(null)
   const detail = useRef<HTMLElement>(null)
@@ -160,13 +164,21 @@ export function LocationSearchPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Kardex · Ubicación #{selected.id}</p>
             <h2 className="mt-1 break-all whitespace-pre-wrap text-xl font-bold text-slate-900">{selected.kardex}</h2>
           </div>
-          <LocationPhoto locationId={selected.id} />
+          <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
+          {user && hasPermission('ubicaciones.fotografia.editar') && <ReplaceLocationPhoto
+            key={selected.id}
+            userId={user.id}
+            locationId={selected.id}
+            version={photoVersion}
+            onUpdated={() => { setPhotoVersion(null); setPhotoRevision((value) => value + 1) }}
+          />}
           {revisionLoading && <p role="status" className="text-sm text-slate-500">Cargando ubicación...</p>}
           {revisionError && <p role="alert" className="text-sm text-red-700">{revisionError}</p>}
           {!revisionLoading && !revisionError && (revision
             ? <p className="text-sm text-slate-600">{revision.latitud ?? '—'}, {revision.longitud ?? '—'}</p>
             : <p className="text-sm text-slate-600">No hay coordenadas o enlace GPS vigente.</p>)}
-          {link && <a className="inline-block rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a>}
+          {revision?.url_gps && <p className="break-all text-sm text-slate-600">URL GPS: {revision.url_gps}</p>}
+          {link && <><p className="break-all text-sm text-slate-600">Enlace: {link}</p><a className="inline-block rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a></>}
         </section>
       ) : query.length > 0 && (
         <section aria-label="Coincidencias de kardex" className="space-y-3">
@@ -178,6 +190,7 @@ export function LocationSearchPage() {
                   setRevision(null)
                   setRevisionError('')
                   setRevisionLoading(location.revision_actual_id !== null)
+                  setPhotoVersion(null)
                   setSelected(location)
                 }} className="flex w-full items-center gap-4 rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-slate-100 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
                   <LazyPhoto locationId={location.id} />

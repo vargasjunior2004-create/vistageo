@@ -580,5 +580,19 @@ INSERT INTO rol_permisos (rol_id, permiso_id)
 
 UPDATE alembic_version SET version_num='0005_panel_permissions' WHERE alembic_version.version_num = '0004_historical_photos';
 
+-- Running upgrade 0005_panel_permissions -> 0006_photo_edit_permission
+
+INSERT INTO permisos (nombre) VALUES ('ubicaciones.fotografia.editar')
+        ON CONFLICT (nombre) DO NOTHING;
+
+INSERT INTO rol_permisos (rol_id, permiso_id)
+        SELECT roles.id, permisos.id FROM roles CROSS JOIN permisos
+        WHERE roles.nombre IN ('TECNICO', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO',
+                               'JEFE TECNICO', 'CAJERO', 'CALL CENTER')
+          AND permisos.nombre IN ('ubicaciones.consultar', 'ubicaciones.fotografia.editar')
+        ON CONFLICT DO NOTHING;
+
+UPDATE alembic_version SET version_num='0006_photo_edit_permission' WHERE alembic_version.version_num = '0005_panel_permissions';
+
 COMMIT;
 

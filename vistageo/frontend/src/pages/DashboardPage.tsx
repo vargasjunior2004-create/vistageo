@@ -7,8 +7,8 @@ export function DashboardPage() {
   const cards = [
     { to: '/registrar-ubicacion', title: 'Registrar ubicación', description: 'Kardex, fachada y GPS', icon: '＋', color: 'bg-blue-700', enabled: hasPermission('ubicaciones.registrar') },
     { to: '/consultar-ubicacion', title: 'Consultar ubicación', description: 'Encuentra un cliente por kardex', icon: '⌕', color: 'bg-cyan-700', enabled: hasPermission('ubicaciones.consultar') },
-    { to: '/jornada/camara', title: 'Sacar fotos', description: 'Fotos de tu jornada en el teléfono', icon: '◉', color: 'bg-indigo-700', enabled: fieldRole },
-    { to: '/jornada/fotos', title: 'Mis fotos', description: 'Revisa y comparte por WhatsApp', icon: '▦', color: 'bg-emerald-700', enabled: fieldRole },
+    { to: '/jornada/camara', title: 'Sacar fotos de jornada', description: 'Fotos de tu jornada en el teléfono', icon: '◉', color: 'bg-blue-800', enabled: fieldRole },
+    { to: '/jornada/fotos', title: 'Mis fotos', description: 'Revisa y comparte tus fotos', icon: '▦', color: 'bg-blue-600', enabled: fieldRole },
   ]
   return (
     <div className="space-y-5">
@@ -26,7 +26,6 @@ export function DashboardPage() {
           </Link>
         ))}
       </div>
-      {fieldRole && <Link to="/jornada/fotos" className="block rounded-2xl border-2 border-emerald-600 bg-white px-5 py-4 text-center font-bold text-emerald-800">ENVIAR FOTOS POR WHATSAPP</Link>}
     </div>
   )
 }

@@ -1,7 +1,9 @@
+import asyncio
 import base64
 import hashlib
 import io
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from uuid import uuid4
 
 import pytest
@@ -92,6 +94,21 @@ def test_unified_rejects_missing_frontend(tmp_path):
             pass
 
 
+def test_unified_starts_photo_recovery_when_enabled(tmp_path, monkeypatch):
+    started = Event()
+
+    async def recovery():
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setenv("VISTAGEO_PHOTO_CLEANUP_ENABLED", "true")
+    monkeypatch.setattr("app.main.recovery_loop", recovery)
+    (tmp_path / "index.html").write_text("<html>frontend</html>")
+    (tmp_path / "assets").mkdir()
+    with TestClient(create_unified_app(tmp_path)):
+        assert started.wait(timeout=2)
+
+
 def test_login_logout_and_uniform_failures(api):
     client, _ = api
     wrong = login(client, "admin", "incorrect")
@@ -178,6 +195,183 @@ def test_photo_storage_errors_are_not_reported_as_missing(api, monkeypatch):
 
     monkeypatch.setattr("app.main.Storage", MissingStorage)
     assert client.get(f"/ubicaciones/{location_id}/fotografia", headers=headers(client)).status_code == 502
+
+
+def test_reemplazo_fotografia_exige_permisos_y_preserva_ubicacion(api, monkeypatch):
+    client, factory = api
+    objects = {"anterior.webp": b"foto anterior"}
+
+    class FakeStorage:
+        def get(self, key):
+            return objects.get(key)
+
+        def put(self, key, content):
+            objects[key] = content
+
+        def delete(self, key):
+            objects.pop(key, None)
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    with factory() as db:
+        admin_id = db.scalar(select(User.id).where(User.username == "ADMIN"))
+        db.add_all([Contract(kardex="Ab-1 "), Contract(kardex="sin-foto")])
+        db.flush()
+        location, empty = Location(kardex="Ab-1 "), Location(kardex="sin-foto")
+        db.add_all([location, empty])
+        db.flush()
+        revision = LocationRevision(ubicacion_id=location.id, latitud=-16, longitud=-68, cerrada=True)
+        db.add(revision)
+        db.flush()
+        location.revision_actual_id = revision.id
+        db.add(Photograph(ubicacion_id=location.id, storage_bucket="fachada", storage_clave="anterior.webp",
+                          sha256=hashlib.sha256(objects["anterior.webp"]).hexdigest(), registrado_por=admin_id))
+        db.commit()
+        location_id, empty_id, revision_id = location.id, empty.id, revision.id
+    image = io.BytesIO()
+    Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
+    auth = headers(client, "tech", "testpass3")
+    body = {"idempotencia": str(uuid4()), "version": "0" * 64,
+            "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+    path = f"/ubicaciones/{location_id}/fotografia"
+    assert client.put(path, headers=auth, json=body).status_code == 403
+    with factory() as db:
+        db.scalar(select(Role).where(Role.name == "TECNICO")).permissions = [
+            db.scalar(select(Permission).where(Permission.name == "ubicaciones.fotografia.editar"))
+        ]
+        db.commit()
+    assert client.put(path, headers=auth, json=body).status_code == 403
+    with factory() as db:
+        db.scalar(select(Role).where(Role.name == "TECNICO")).permissions = list(db.scalars(select(Permission).where(
+            Permission.name.in_(["ubicaciones.fotografia.editar", "ubicaciones.consultar"])
+        )).all())
+        db.commit()
+    response = client.get(path, headers=auth)
+    body["version"] = response.headers["x-foto-version"]
+    assert client.put(path, headers=auth, json={**body, "latitud": 0}).status_code == 422
+    assert client.put(f"/ubicaciones/{empty_id}/fotografia", headers=auth, json=body).status_code == 404
+    assert client.put(path, headers=auth, json=body).json() == {"estado": "finalizada"}
+    assert "anterior.webp" not in objects
+    assert client.put(path, headers=auth, json=body).json() == {"estado": "finalizada"}
+    assert client.put(path, headers=auth, json={**body, "idempotencia": str(uuid4())}).status_code == 412
+    updated = client.get(path, headers=auth)
+    assert updated.status_code == 200 and updated.headers["x-foto-version"] != body["version"]
+    with factory() as db:
+        photo = db.scalar(select(Photograph).where(Photograph.ubicacion_id == location_id))
+        location = db.get(Location, location_id)
+        assert location.kardex == "Ab-1 " and location.revision_actual_id == revision_id
+        assert photo.storage_clave in objects and photo.sha256 == hashlib.sha256(objects[photo.storage_clave]).hexdigest()
+        audit = db.scalar(select(AuditRecord).where(AuditRecord.accion == "CONFIRMAR_REEMPLAZO_FOTOGRAFIA"))
+        assert audit.detalles["sha256_anterior"] == hashlib.sha256(b"foto anterior").hexdigest()
+
+
+def test_reemplazo_reintenta_limpieza_sin_borrar_foto_vigente(api, monkeypatch):
+    from app.fotografia import cleanup_operation, recover_pending_replacements
+
+    client, factory = api
+    objects = {"anterior.webp": b"foto anterior"}
+
+    class FakeStorage:
+        fail = True
+        deleted = []
+
+        def get(self, key):
+            return objects.get(key)
+
+        def put(self, key, content):
+            objects[key] = content
+
+        def delete(self, key):
+            self.deleted.append(key)
+            if self.fail:
+                raise RuntimeError("Storage interrumpido")
+            objects.pop(key, None)
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    monkeypatch.setattr("app.fotografia.Storage", FakeStorage)
+    monkeypatch.setattr("app.fotografia.session_factory", lambda: factory)
+    with factory() as db:
+        user = db.scalar(select(User).where(User.username == "ADMIN"))
+        db.add(Contract(kardex="test-limpieza"))
+        db.flush()
+        location = Location(kardex="test-limpieza")
+        db.add(location)
+        db.flush()
+        db.add(Photograph(ubicacion_id=location.id, storage_bucket="fachada", storage_clave="anterior.webp",
+                          registrado_por=user.id))
+        db.commit()
+        location_id = location.id
+    auth = headers(client)
+    path = f"/ubicaciones/{location_id}/fotografia"
+    version = client.get(path, headers=auth).headers["x-foto-version"]
+    image = io.BytesIO()
+    Image.new("RGB", (10, 10), "red").save(image, format="JPEG")
+    body = {"idempotencia": str(uuid4()), "version": version,
+            "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+    assert client.put(path, headers=auth, json=body).json() == {"estado": "pendiente_limpieza"}
+    with factory() as db:
+        operation = db.scalar(select(PhotoOperation))
+        photo = db.scalar(select(Photograph))
+        current_key = photo.storage_clave
+        assert operation.limpieza_clave == "anterior.webp" and current_key in objects
+        operation.limpieza_clave = current_key
+        db.commit()
+        assert cleanup_operation(db, operation.id, FakeStorage()) == "pendiente_limpieza"
+        assert current_key not in FakeStorage.deleted
+        operation.limpieza_clave = "anterior.webp"
+        db.commit()
+    FakeStorage.fail = False
+    recover_pending_replacements()
+    with factory() as db:
+        assert db.scalar(select(PhotoOperation)).estado == "finalizada"
+    assert "anterior.webp" not in objects and current_key in objects
+    assert client.put(path, headers=auth, json=body).json() == {"estado": "finalizada"}
+
+
+def test_reemplazo_con_fallo_de_carga_conserva_foto_anterior(api, monkeypatch):
+    client, factory = api
+    objects = {"anterior.webp": b"original"}
+
+    class FakeStorage:
+        fail = True
+
+        def get(self, key):
+            return objects.get(key)
+
+        def put(self, key, content):
+            if self.fail:
+                raise RuntimeError("interrupción de carga")
+            objects[key] = content
+
+        def delete(self, key):
+            objects.pop(key, None)
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    with factory() as db:
+        actor_id = db.scalar(select(User.id).where(User.username == "ADMIN"))
+        db.add(Contract(kardex="fallo-carga"))
+        db.flush()
+        location = Location(kardex="fallo-carga")
+        db.add(location)
+        db.flush()
+        db.add(Photograph(ubicacion_id=location.id, storage_bucket="fachada",
+                          storage_clave="anterior.webp", registrado_por=actor_id))
+        db.commit()
+        location_id = location.id
+    auth = headers(client)
+    path = f"/ubicaciones/{location_id}/fotografia"
+    version = client.get(path, headers=auth).headers["x-foto-version"]
+    image = io.BytesIO()
+    Image.new("RGB", (10, 10), "blue").save(image, format="JPEG")
+    body = {"idempotencia": str(uuid4()), "version": version,
+            "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+    assert client.put(path, headers=auth, json=body).status_code == 503
+    assert objects == {"anterior.webp": b"original"}
+    with factory() as db:
+        assert db.scalar(select(Photograph)).storage_clave == "anterior.webp"
+        assert db.scalar(select(PhotoOperation)).estado == "preparada"
+    FakeStorage.fail = False
+    assert client.put(path, headers=auth, json=body).json() == {"estado": "finalizada"}
+    assert "anterior.webp" not in objects
 
 
 def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monkeypatch):

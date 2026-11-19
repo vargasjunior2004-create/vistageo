@@ -121,7 +121,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
               {selected.length === photos.length && photos.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
             </Button>
             <Button type="button" variant="danger" disabled={!selected.length} onClick={() => void remove()}>Eliminar ({selected.length})</Button>
-            <Button type="button" disabled={!selected.length} onClick={() => void share()}>ENVIAR POR WHATSAPP</Button>
+            <Button type="button" disabled={!selected.length} onClick={() => void share()}>Compartir fotos</Button>
           </div>
           {!photos.length && <p className="rounded-2xl bg-white p-5 text-slate-600">Todavía no hay fotos. Abre la cámara para empezar.</p>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">

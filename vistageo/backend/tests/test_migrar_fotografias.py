@@ -1,4 +1,5 @@
 import io
+import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
@@ -50,6 +51,22 @@ def test_storage_distingue_objeto_ausente_de_error():
     storage.opener = Opener(520, b'{}')
     with pytest.raises(StorageTransientError):
         storage.get("missing.webp")
+
+
+def test_storage_elimina_solo_la_clave_exacta_con_api_json():
+    class Opener:
+        def open(self, request, timeout):
+            assert request.method == "DELETE"
+            assert request.full_url.endswith("/object/fachada")
+            assert request.get_header("Content-type") == "application/json"
+            assert json.loads(request.data) == {"prefixes": ["historicas/a %.webp"]}
+            return io.BytesIO(b"[]")
+
+    storage = Storage.__new__(Storage)
+    storage.origin = "https://example.invalid/storage/v1"
+    storage.key = "secret-test"
+    storage.opener = Opener()
+    storage.delete("historicas/a %.webp")
 
 
 def test_reintenta_fallo_transitorio_sin_ocultar_errores_permanentes(monkeypatch):

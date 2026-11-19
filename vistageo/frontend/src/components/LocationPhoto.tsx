@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiPhoto } from '../api/client'
 
-export function LocationPhoto({ locationId, thumbnail = false }: { locationId: number; thumbnail?: boolean }) {
+export function LocationPhoto({ locationId, thumbnail = false, onVersion }: { locationId: number; thumbnail?: boolean; onVersion?: (version: string | null) => void }) {
   const [url, setUrl] = useState<string | null>(null)
   const [message, setMessage] = useState('Cargando fotografía...')
 
@@ -11,10 +11,11 @@ export function LocationPhoto({ locationId, thumbnail = false }: { locationId: n
     setUrl(null)
     setMessage('Cargando fotografía...')
     apiPhoto(`/ubicaciones/${locationId}/fotografia`, controller.signal)
-      .then((blob) => {
+      .then(({ blob, version }) => {
         if (controller.signal.aborted) return
         objectUrl = URL.createObjectURL(blob)
         setUrl(objectUrl)
+        onVersion?.(version)
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return
@@ -28,7 +29,7 @@ export function LocationPhoto({ locationId, thumbnail = false }: { locationId: n
       controller.abort()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [locationId])
+  }, [locationId, onVersion])
 
   return url
     ? <img src={url} alt="Fachada del contrato seleccionado" className={thumbnail ? 'h-20 w-20 rounded-xl object-cover' : 'max-h-96 rounded-xl object-contain'} />

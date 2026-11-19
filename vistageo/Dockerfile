@@ -11,4 +11,5 @@ COPY backend/ ./
 RUN pip install --no-cache-dir .
 COPY --from=frontend /build/dist /app/frontend-dist
 ENV FRONTEND_DIST=/app/frontend-dist
+ENV VISTAGEO_PHOTO_CLEANUP_ENABLED=true
 CMD ["sh", "-c", "exec uvicorn app.unified:app --host 0.0.0.0 --port ${PORT:-8000}"]

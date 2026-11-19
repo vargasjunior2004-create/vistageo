@@ -14,7 +14,8 @@ def create_unified_app(frontend: Path) -> FastAPI:
     async def lifespan(_app: FastAPI):
         if not (frontend / "index.html").is_file() or not (frontend / "assets").is_dir():
             raise RuntimeError("La compilación del frontend no está disponible")
-        yield
+        async with api.router.lifespan_context(api):
+            yield
 
     application = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     application.mount("/api", api)

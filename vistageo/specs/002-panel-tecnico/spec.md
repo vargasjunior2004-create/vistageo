@@ -22,9 +22,11 @@ administrativas.
 
 El kardex se conserva exactamente. Se permite crear el contrato cuando no
 existe; si ya tiene una ubicación se rechaza el registro duplicado. Se requiere
-foto de fachada y coordenadas válidas. Las fotos y revisiones anteriores no
-se sobrescriben. El servidor autoriza, valida, audita y coordina las operaciones
-de Storage con PostgreSQL, incluyendo fallos y reintentos.
+foto de fachada y coordenadas válidas. Antes de confirmar el registro se
+muestran kardex, imagen y enlace Google Maps derivado de las coordenadas.
+Las revisiones anteriores no se modifican. El servidor autoriza, valida,
+audita y coordina las operaciones de Storage con PostgreSQL, incluyendo fallos
+y reintentos.
 
 ### Consulta dinámica por kardex
 
@@ -38,6 +40,28 @@ se abre su ficha. La interfaz indica carga, ausencia de resultados y errores,
 limita las solicitudes mientras se escribe y descarta respuestas obsoletas.
 La consulta parcial y las fotografías requieren `ubicaciones.consultar`; la
 consulta exacta necesaria para registrar conserva sus permisos actuales.
+
+### Reemplazo de fotografía oficial
+
+Desde la ficha de consulta se permite reemplazar una fotografía existente,
+pero no agregar una primera fotografía ni modificar el kardex o el GPS. Se
+requiere el permiso configurable `ubicaciones.fotografia.editar` y el acceso a
+la consulta; los roles TECNICO, GERENTE, JEFE COMERCIAL, JEFE OPERATIVO,
+JEFE TECNICO, CAJERO y CALL CENTER reciben inicialmente el permiso. El
+permiso de consulta se asigna también a esos roles como requisito de acceso;
+el administrador conserva acceso. El usuario toma o selecciona una imagen, la
+previsualiza y confirma expresamente el reemplazo y la eliminación definitiva.
+
+La imagen nueva se valida, optimiza, sube y verifica antes de publicar su
+referencia. La operación es idempotente y serializada por ubicación; registra
+actor, huellas anterior y nueva y progreso. La copia anterior de Storage,
+incluidas copias de fotografías históricas, se elimina solo después de publicar
+la nueva y de verificar que no sea una referencia vigente. Si la limpieza
+falla, queda pendiente y se reintenta; no se informa como eliminada hasta
+confirmarlo. El RAR original y los registros de procedencia no se modifican.
+La fotografía anterior eliminada no puede recuperarse desde Storage; se
+conserva su trazabilidad, no su contenido. Esta regla sustituye la decisión
+anterior de conservar las fotos históricas en Storage.
 
 ## Jornada local y conectividad
 
@@ -61,3 +85,6 @@ preparación inicial y ausencia de cargas de fotos de jornada. Utilizar
 servicios simulados y PostgreSQL desechable; nunca datos de producción.
 Verificar también coincidencias parciales literales, mayúsculas y minúsculas,
 paginación, permisos y descarte de respuestas anteriores en el buscador.
+Para el reemplazo, verificar que no se alteran kardex ni GPS, la conservación
+de procedencia, idempotencia, concurrencia, fallos y recuperación del borrado,
+incluyendo reinicios y protección de referencias vigentes.

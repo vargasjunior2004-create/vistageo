@@ -16,7 +16,7 @@ ADMIN = "ADMINISTRADOR"
 PERMISSION_MANAGERS = {ADMIN, "GERENTE", "JEFE COMERCIAL", "JEFE OPERATIVO"}
 PERMISSIONS = {
     "usuarios.consultar", "usuarios.gestionar", "roles.consultar", "roles.gestionar",
-    "ubicaciones.consultar", "ubicaciones.registrar",
+    "ubicaciones.consultar", "ubicaciones.registrar", "ubicaciones.fotografia.editar",
 }
 SESSION_IDLE = timedelta(minutes=10)
 LOCK_DURATION = timedelta(minutes=15)
