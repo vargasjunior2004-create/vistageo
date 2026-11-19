@@ -26,6 +26,24 @@ def test_storage_acepta_variables_de_entorno_y_exige_mismo_proyecto(monkeypatch)
         Storage()
 
 
+@pytest.mark.parametrize(("url", "db_suffix", "key", "message"), [
+    ("https://abcdefghijklmnopqrst.supabase.co/storage/v1", "?sslmode=verify-full&sslrootcert=ca", "sb_secret_test", "componentes adicionales"),
+    ("https://abcdefghijklmnopqrst.supabase.co:secret", "?sslmode=verify-full&sslrootcert=ca", "sb_secret_test", "formato de SUPABASE_URL"),
+    ("https://abcdefghijklmnopqrst.supabase.co", "?sslmode=require", "sb_secret_test", "TLS verificado"),
+    ("https://abcdefghijklmnopqrst.supabase.co", "?sslmode=verify-full&sslrootcert=ca", "clave-privada", "SUPABASE_SECRET_KEY"),
+])
+def test_storage_diagnostico_no_expone_valores(monkeypatch, url, db_suffix, key, message):
+    database = "postgresql+psycopg://postgres.abcdefghijklmnopqrst:contrasena-privada@pool.example/postgres" + db_suffix
+    monkeypatch.setattr("app.storage.database_url", lambda: database)
+    monkeypatch.setenv("SUPABASE_URL", url)
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", key)
+    with pytest.raises(RuntimeError, match=message) as error:
+        Storage()
+    assert url not in str(error.value)
+    assert key not in str(error.value)
+    assert "contrasena-privada" not in str(error.value)
+
+
 def test_storage_distingue_objeto_ausente_de_error():
     class Opener:
         def __init__(self, code, body):

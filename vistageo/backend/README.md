@@ -145,6 +145,11 @@ el índice por permiso facilita la búsqueda inversa de roles.
 
 ### Fotografía, auditoría y Storage
 
+Si la configuración de Storage se rechaza, los registros del backend indican
+qué comprobación falló sin mostrar las URL, contraseñas ni claves. La respuesta
+al navegador sigue siendo genérica. `SUPABASE_URL` debe ser la raíz HTTPS del
+proyecto, sin `/storage/v1`; el backend añade esa ruta.
+
 Los triggers de PostgreSQL exigen `app.usuario_id` para las modificaciones
 ordinarias de fotografías. Como excepción, permiten crear una fotografía
 histórica sin actor si su procedencia es una imagen confirmada para la misma

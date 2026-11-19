@@ -175,7 +175,7 @@ def test_private_photo_read_requires_admin_and_checks_integrity(api, monkeypatch
     assert client.get("/ubicaciones/99999/fotografia", headers=admin).status_code == 404
 
 
-def test_photo_storage_errors_are_not_reported_as_missing(api, monkeypatch):
+def test_photo_storage_errors_are_not_reported_as_missing(api, monkeypatch, caplog):
     client, factory = api
     with factory() as db:
         admin_id = db.scalar(select(User.id).where(User.username == "ADMIN"))
@@ -195,6 +195,19 @@ def test_photo_storage_errors_are_not_reported_as_missing(api, monkeypatch):
 
     monkeypatch.setattr("app.main.Storage", MissingStorage)
     assert client.get(f"/ubicaciones/{location_id}/fotografia", headers=headers(client)).status_code == 502
+    from app.storage import Storage
+    monkeypatch.setattr("app.main.Storage", Storage)
+    monkeypatch.setattr("app.storage.database_url", lambda: (
+        "postgresql+psycopg://postgres.abcdefghijklmnopqrst:password-test@pool.example/postgres"
+        "?sslmode=verify-full&sslrootcert=ca"
+    ))
+    monkeypatch.setenv("SUPABASE_URL", "https://abcdefghijklmnopqrst.supabase.co/storage/v1")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    response = client.get(f"/ubicaciones/{location_id}/fotografia", headers=headers(client))
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Fotografía no disponible"
+    assert "SUPABASE_URL contiene componentes adicionales" in caplog.text
+    assert "password-test" not in caplog.text and "sb_secret_test" not in caplog.text
 
 
 def test_reemplazo_fotografia_exige_permisos_y_preserva_ubicacion(api, monkeypatch):

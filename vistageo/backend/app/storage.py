@@ -6,6 +6,7 @@ from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 from app.database import database_url
 
@@ -23,17 +24,28 @@ class StorageTransientError(RuntimeError):
 
 class Storage:
     def __init__(self):
-        db = make_url(database_url())
-        url = urlsplit(os.environ.get("SUPABASE_URL", ""))
+        try:
+            db = make_url(database_url())
+        except (ArgumentError, ValueError):
+            raise RuntimeError("Configuración de Storage: formato de DATABASE_URL inválido") from None
+        try:
+            url = urlsplit(os.environ.get("SUPABASE_URL", ""))
+            port = url.port
+        except ValueError:
+            raise RuntimeError("Configuración de Storage: formato de SUPABASE_URL inválido") from None
         self.key = os.environ.get("SUPABASE_SECRET_KEY")
         project = (url.hostname or "").removesuffix(".supabase.co")
         if (url.scheme != "https" or not url.hostname or url.hostname != f"{project}.supabase.co"
-                or not re.fullmatch(r"[a-z0-9]{20}", project) or url.username or url.password or url.port
-                or url.path not in ("", "/") or url.query or url.fragment
-                or not (db.username == f"postgres.{project}" or db.host == f"db.{project}.supabase.co")
-                or db.query.get("sslmode") != "verify-full" or not db.query.get("sslrootcert")
-                or not self.key or not self.key.startswith("sb_secret_")):
-            raise RuntimeError("Storage y PostgreSQL deben usar el mismo proyecto y TLS verificado")
+                or not re.fullmatch(r"[a-z0-9]{20}", project)):
+            raise RuntimeError("Configuración de Storage: dominio o esquema de SUPABASE_URL inválido")
+        if url.username or url.password or port or url.path not in ("", "/") or url.query or url.fragment:
+            raise RuntimeError("Configuración de Storage: SUPABASE_URL contiene componentes adicionales")
+        if not (db.username == f"postgres.{project}" or db.host == f"db.{project}.supabase.co"):
+            raise RuntimeError("Configuración de Storage: PostgreSQL no corresponde al mismo proyecto")
+        if db.query.get("sslmode") != "verify-full" or not db.query.get("sslrootcert"):
+            raise RuntimeError("Configuración de Storage: DATABASE_URL requiere TLS verificado y certificado raíz")
+        if not self.key or not self.key.startswith("sb_secret_"):
+            raise RuntimeError("Configuración de Storage: falta SUPABASE_SECRET_KEY o su formato es inválido")
         self.origin = f"https://{url.hostname}/storage/v1"
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
