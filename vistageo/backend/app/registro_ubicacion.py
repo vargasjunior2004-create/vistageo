@@ -10,7 +10,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import AuditRecord, Contract, Location, LocationRevision, PhotoOperation, Photograph, User
+from app.models import AuditRecord, Contract, Location, LocationRevision, PhotoOperation, Photograph, User, now_utc
 from app.schemas import FieldLocationCreate
 from app.storage import BUCKET, Storage
 
@@ -48,7 +48,7 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
         if contract is None:
             db.add(Contract(kardex=data.kardex))
             db.add(AuditRecord(usuario_id=actor.id, accion="CREAR_CONTRATO", detalles={"kardex": data.kardex}))
-        location = Location(kardex=data.kardex)
+        location = Location(kardex=data.kardex, creado_por=actor.id, creado_en=now_utc())
         db.add(location)
         try:
             db.flush()

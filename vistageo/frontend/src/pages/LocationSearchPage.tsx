@@ -163,6 +163,8 @@ export function LocationSearchPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Kardex · Ubicación #{selected.id}</p>
             <h2 className="mt-1 break-all whitespace-pre-wrap text-xl font-bold text-slate-900">{selected.kardex}</h2>
+            <p className="mt-2 text-sm text-slate-600">Registrado por: {selected.creado_por_nombre ?? 'Desconocido'}</p>
+            <p className="text-sm text-slate-600">Fecha de registro: {selected.creado_en ? new Date(selected.creado_en).toLocaleString() : 'Desconocida'}</p>
           </div>
           <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
           {user && hasPermission('ubicaciones.fotografia.editar') && <ReplaceLocationPhoto
@@ -196,6 +198,7 @@ export function LocationSearchPage() {
                   <LazyPhoto locationId={location.id} />
                   <span className="min-w-0 flex-1">
                     <span className="block break-all whitespace-pre-wrap font-bold text-slate-900"><Highlight value={location.kardex} query={query} /></span>
+                    <span className="mt-1 block text-sm text-slate-600">Registrado por: {location.creado_por_nombre ?? 'Desconocido'}</span>
                     <span className="mt-1 block text-xs text-slate-500">Ubicación #{location.id} · {location.revision_actual_id === null ? 'Sin revisión vigente' : 'Con revisión vigente'}</span>
                   </span>
                   <span aria-hidden="true" className="text-xl text-blue-700">›</span>

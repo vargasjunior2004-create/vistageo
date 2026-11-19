@@ -6,9 +6,7 @@ const navItems = [
   { to: '/', label: 'Inicio', icon: '⌂' },
   { to: '/usuarios', label: 'Usuarios', permission: 'usuarios.consultar' },
   { to: '/roles', label: 'Roles', permission: 'roles.consultar' },
-  { to: '/contratos', label: 'Contratos', admin: true },
   { to: '/ubicaciones', label: 'Ubicaciones', admin: true },
-  { to: '/procedencia', label: 'Procedencia', admin: true },
 ]
 
 export function Layout({ children }: { children: React.ReactNode }) {

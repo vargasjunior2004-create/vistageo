@@ -458,6 +458,9 @@ def test_registro_campo_en_postgresql_preserva_auditoria_y_reintentos(db):
         location = register_location(data, actor, session, FakeStorage())
         assert location.kardex == data.kardex
         assert location.revision_actual_id is not None
+        assert location.creado_por == actor_id and location.creado_en is not None
+        rejected(db, "UPDATE ubicaciones SET creado_por=NULL WHERE id=:id", {"id": location.id})
+        rejected(db, "UPDATE ubicaciones SET creado_en=CURRENT_TIMESTAMP + interval '1 day' WHERE id=:id", {"id": location.id})
         assert db.execute(text("SELECT registrado_por FROM fotografias WHERE ubicacion_id=:id"), {"id": location.id}).scalar_one() == actor_id
         assert db.execute(text("SELECT count(*) FROM auditoria WHERE usuario_id=:actor AND ubicacion_id=:id AND accion='CREAR_FOTOGRAFIA'"),
                           {"actor": actor_id, "id": location.id}).scalar_one() == 1
@@ -641,7 +644,7 @@ def test_tablas_y_objetos_no_son_accesibles_a_roles_supabase(db):
                 }).scalar_one()
         for function in (
             "impedir_edicion_auditoria_usuarios", "proteger_revision_cerrada",
-            "verificar_revision_actual", "preparar_fotografia", "auditar_fotografia",
+            "verificar_revision_actual", "preparar_fotografia", "auditar_fotografia", "proteger_creacion_ubicacion",
             "proteger_operacion_fotografia", "impedir_edicion_auditoria",
         ):
             assert not db.execute(text("SELECT has_function_privilege(:role, :function, 'EXECUTE')"), {

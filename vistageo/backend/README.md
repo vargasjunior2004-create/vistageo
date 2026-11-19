@@ -52,8 +52,16 @@ para los roles existentes; también garantiza los permisos de usuarios
 necesarios para gerente y jefe comercial.
 `0006_photo_edit_permission` incorpora el permiso configurable de reemplazo de
 fotografía y su requisito de consulta para los roles aprobados.
+`0007_location_creation` agrega el creador y la fecha de creación de cada
+ubicación. Recupera ambos solo cuando existe exactamente un evento de creación
+de campo o administrativa con usuario en la auditoría; las demás ubicaciones
+quedan con valores desconocidos. Un trigger impide modificarlos después.
+Una actualización Alembic normal desde `0004` ejecuta las asignaciones de
+`0005` y `0006`; no debe utilizarse cuando se haya decidido conservar
+exactamente los permisos actuales sin preparar y verificar un procedimiento
+transaccional específico.
 `sql/esquema_postgresql.sql` es la salida de `alembic upgrade head --sql` para
-una **base nueva y vacía**: incluye las seis revisiones y `alembic_version`.
+una **base nueva y vacía**: incluye las siete revisiones y `alembic_version`.
 No ejecutar ese script sobre un esquema ya existente; para actualizar una
 instalación existente se utiliza Alembic desde su revisión actual, previa
 autorización y copia de seguridad. No ejecutar el SQL y Alembic como dos
@@ -84,7 +92,7 @@ para el dialecto PostgreSQL, sin conectar al servidor:
 | `roles` / `Role`, `permisos` / `Permission`, `rol_permisos` | Catálogo de roles y permisos; cada usuario tiene exactamente un rol y cada rol puede tener varios permisos. |
 | `usuarios` / `User`, `sesiones` / `AuthSession`, `auditoria_usuarios` / `AuditEvent` | Cuentas, sesiones y auditoría del módulo existente. |
 | `contratos` / `Contract` | `kardex` textual es clave primaria con colación `C`: se conserva sin normalización y solo se rechazan duplicados exactos y valores vacíos. |
-| `ubicaciones` / `Location` | Como máximo una por contrato; su revisión actual es opcional y debe ser cerrada y pertenecer a la misma ubicación. |
+| `ubicaciones` / `Location` | Como máximo una por contrato; conserva creador y fecha originales cuando se conocen. Su revisión actual es opcional y debe ser cerrada y pertenecer a la misma ubicación. |
 | `revisiones_ubicacion` / `LocationRevision` | Historial de URL y coordenadas; autor y fecha del evento histórico pueden ser desconocidos. Coordenadas juntas y dentro de sus rangos; las revisiones cerradas no se editan ni eliminan. |
 | `fotografias` / `Photograph` | Una fotografía vigente como máximo por ubicación, con referencia al objeto, huella y usuario; en una importación histórica conserva además procedencia y huella original. No contiene la imagen. |
 | `operaciones_fotografia` / `PhotoOperation` | Estado persistente, claves exactas, idempotencia e intentos para coordinación con Storage; `fotografia_id` es informativo, sin FK, para sobrevivir al borrado. |
@@ -98,6 +106,26 @@ específico, el usuario confirmó que cada carpeta principal representa un
 kardex; el importador puede asociar sus archivos a ese contrato.
 En una importación histórica automatizada `registrado_por` es nulo: no se
 atribuye la carga a una persona que no se ha autenticado.
+
+```mermaid
+erDiagram
+    CONTRATOS ||--o| UBICACIONES : identifica
+    USUARIOS o|--o{ UBICACIONES : crea
+    UBICACIONES ||--o{ REVISIONES_UBICACION : conserva
+    UBICACIONES ||--o| FOTOGRAFIAS : tiene
+    FOTOGRAFIAS }o--o| PROCEDENCIA_HISTORICA : identifica_origen
+    UBICACIONES ||--o{ OPERACIONES_FOTOGRAFIA : coordina
+    UBICACIONES ||--o{ AUDITORIA : registra
+```
+
+La fecha y el usuario de `ubicaciones` se establecen en el backend al iniciar
+un registro de campo o administrativo, no los envía el cliente. Un registro
+de campo puede quedar preparado pero incompleto si Storage falla; la fecha
+representa la preparación inicial, no necesariamente la finalización. Los
+valores recuperados de auditoría representan el evento registrado por el
+servidor; no se atribuyen usuarios ni fechas originales desconocidas a las
+importaciones históricas. El nombre mostrado corresponde al nombre actual
+de la cuenta creadora.
 
 Las claves primarias y restricciones únicas indexan kardex, la ubicación por
 contrato, la foto por ubicación, la clave de Storage y la idempotencia. El
@@ -236,6 +264,9 @@ La consulta de contratos y ubicaciones requiere `ubicaciones.consultar`;
 `ubicaciones.registrar` permite consultar por kardex exacto para evitar
 duplicados y registrar una ubicación oficial. La gestión histórica y los
 endpoints individuales de creación y edición siguen siendo de administrador.
+La búsqueda y ficha con permiso de consulta incluyen `creado_en` y
+`creado_por_nombre`; pueden ser nulos para datos anteriores desconocidos.
+La consulta exacta autorizada solo para registro no divulga esos metadatos.
 El kardex se conserva exactamente; se rechazan duplicados exactos.
 `GET /ubicaciones?kardex_contiene=texto` busca una parte literal sin distinguir
 mayúsculas de minúsculas; los espacios y caracteres `%`, `_` y `/` son
@@ -288,6 +319,10 @@ otro frontend. Para volver al modo separado, usar el runtime Python y la
 configuración siguiente.
 Antes de habilitar edición hay que revisar y autorizar por separado `0006`
 en la base de destino. El despliegue no aplica esa revisión.
+La revisión `0007` también requiere autorización separada y una copia de
+seguridad restaurable. Para evitar registros sin metadatos durante el cambio,
+detener las escrituras mientras se aplica `0007` y se despliega el backend
+compatible; comprobar la versión y los flujos antes de reanudarlas.
 
 ### Dos servicios
 

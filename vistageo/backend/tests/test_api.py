@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
-from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, User
+from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, User, as_utc
 from app.security import PERMISSIONS, password_hash
 from app.unified import create_unified_app
 
@@ -216,7 +216,8 @@ def test_reemplazo_fotografia_exige_permisos_y_preserva_ubicacion(api, monkeypat
         admin_id = db.scalar(select(User.id).where(User.username == "ADMIN"))
         db.add_all([Contract(kardex="Ab-1 "), Contract(kardex="sin-foto")])
         db.flush()
-        location, empty = Location(kardex="Ab-1 "), Location(kardex="sin-foto")
+        created_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
+        location, empty = Location(kardex="Ab-1 ", creado_por=admin_id, creado_en=created_at), Location(kardex="sin-foto")
         db.add_all([location, empty])
         db.flush()
         revision = LocationRevision(ubicacion_id=location.id, latitud=-16, longitud=-68, cerrada=True)
@@ -259,6 +260,7 @@ def test_reemplazo_fotografia_exige_permisos_y_preserva_ubicacion(api, monkeypat
         photo = db.scalar(select(Photograph).where(Photograph.ubicacion_id == location_id))
         location = db.get(Location, location_id)
         assert location.kardex == "Ab-1 " and location.revision_actual_id == revision_id
+        assert location.creado_por == admin_id and location.creado_en.replace(tzinfo=timezone.utc) == created_at
         assert photo.storage_clave in objects and photo.sha256 == hashlib.sha256(objects[photo.storage_clave]).hexdigest()
         audit = db.scalar(select(AuditRecord).where(AuditRecord.accion == "CONFIRMAR_REEMPLAZO_FOTOGRAFIA"))
         assert audit.detalles["sha256_anterior"] == hashlib.sha256(b"foto anterior").hexdigest()
@@ -402,6 +404,9 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
     body = {"idempotencia": str(uuid4()), "kardex": "aB-1 ", "latitud": "-16.5", "longitud": "-68.1",
             "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "creado_por": 1}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "creado_en": "2000-01-01T00:00:00Z"}).status_code == 422
+    start = datetime.now(timezone.utc)
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 503
     with factory() as db:
         location = db.scalar(select(Location).where(Location.kardex == body["kardex"]))
@@ -412,17 +417,27 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     response = client.post("/registro-ubicacion", headers=auth, json=body)
     assert response.status_code == 201
     assert response.json()["kardex"] == "aB-1 "
+    assert response.json()["creado_por_nombre"] == "TECH"
+    assert start <= as_utc(datetime.fromisoformat(response.json()["creado_en"])) <= datetime.now(timezone.utc)
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 201
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "idempotencia": str(uuid4())}).status_code == 409
     with factory() as db:
         photo = db.scalar(select(Photograph))
         revision = db.get(LocationRevision, response.json()["revision_actual_id"])
         assert photo.registrado_por == revision.responsable_id
+        assert db.get(Location, response.json()["id"]).creado_por == revision.responsable_id
         assert len(db.scalars(select(Photograph)).all()) == 1
         assert db.scalar(select(PhotoOperation)).estado == "finalizada"
-    assert client.get("/ubicaciones", headers=auth, params={"kardex": "aB-1 "}).json()[0]["kardex"] == "aB-1 "
+    result = client.get("/ubicaciones", headers=auth, params={"kardex_contiene": "b-1"}).json()[0]
+    assert result["kardex"] == "aB-1 " and result["creado_por_nombre"] == "TECH"
+    assert result["creado_en"] == response.json()["creado_en"]
     assert client.get(f"/ubicaciones/{response.json()['id']}/fotografia", headers=auth).status_code == 200
     assert client.get("/usuarios", headers=auth).status_code == 403
+    admin = headers(client)
+    assert client.post(f"/ubicaciones/{response.json()['id']}/revisiones", headers=admin,
+                       json={"latitud": 1, "longitud": 2}).status_code == 201
+    updated = client.get(f"/ubicaciones/{response.json()['id']}", headers=auth).json()
+    assert updated["creado_por_nombre"] == "TECH" and updated["creado_en"] == result["creado_en"]
 
 
 def test_field_registration_checks_permissions_and_invalid_photo_before_writes(api, monkeypatch):
@@ -445,6 +460,26 @@ def test_field_registration_checks_permissions_and_invalid_photo_before_writes(a
     assert client.get("/ubicaciones", headers=auth, params={"kardex": "nuevo"}).status_code == 200
     with factory() as db:
         assert db.scalar(select(Contract)) is None
+
+
+def test_creator_metadata_requires_location_consult_permission(api):
+    client, factory = api
+    with factory() as db:
+        tech = db.scalar(select(User).where(User.username == "TECH"))
+        tech.role.permissions = [db.scalar(select(Permission).where(Permission.name == "ubicaciones.registrar"))]
+        db.add(Contract(kardex="privado"))
+        db.add(Contract(kardex="historico"))
+        db.flush()
+        db.add(Location(kardex="privado", creado_por=tech.id, creado_en=datetime.now(timezone.utc)))
+        db.add(Location(kardex="historico"))
+        db.commit()
+    auth = headers(client, "tech", "testpass3")
+    result = client.get("/ubicaciones", headers=auth, params={"kardex": "privado"}).json()[0]
+    assert result["creado_por_nombre"] is None and result["creado_en"] is None
+    assert client.get("/ubicaciones", headers=auth, params={"kardex_contiene": "priv"}).status_code == 403
+    admin = headers(client)
+    historical = client.get("/ubicaciones", headers=admin, params={"kardex": "historico"}).json()[0]
+    assert historical["creado_por_nombre"] is None and historical["creado_en"] is None
 
 
 @pytest.mark.parametrize("matching", [True, False])
@@ -693,6 +728,8 @@ def test_busqueda_parcial_literal_paginada_y_permisos(api):
     assert [row["kardex"] for row in result.json()] == ["Ab-1", "ab-1 "]
     assert [row["kardex"] for row in client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "1 "}).json()] == ["ab-1 "]
     assert client.get("/ubicaciones", headers=manager, params={"kardex": "ab-1"}).json() == []
+    assert client.get("/ubicaciones", headers=tech, params={"kardex": "   "}).status_code == 422
+    assert client.get("/ubicaciones", headers=manager, params={"kardex_contiene": " "}).status_code == 200
     assert client.get("/ubicaciones", headers=manager, params={"kardex_contiene": ""}).status_code == 422
     assert client.get("/ubicaciones", headers=manager, params={"kardex_contiene": "a\x00"}).status_code == 422
     assert client.get("/ubicaciones", headers=manager, params={"kardex": "Ab-1", "kardex_contiene": "ab"}).status_code == 422

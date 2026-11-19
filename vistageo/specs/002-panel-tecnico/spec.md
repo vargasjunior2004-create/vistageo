@@ -20,10 +20,13 @@ administrativas.
 
 ## Ubicaciones
 
-El kardex se conserva exactamente. Se permite crear el contrato cuando no
-existe; si ya tiene una ubicación se rechaza el registro duplicado. Se requiere
+El kardex se conserva exactamente. El backend crea el contrato cuando no
+existe; el formulario no consulta contratos. Si ya tiene una ubicación se
+rechaza el registro duplicado. Se requiere
 foto de fachada y coordenadas válidas. Antes de confirmar el registro se
 muestran kardex, imagen y enlace Google Maps derivado de las coordenadas.
+El servidor registra automáticamente el usuario autenticado y la fecha de
+preparación de la ubicación, sin aceptar esos valores desde el cliente.
 Las revisiones anteriores no se modifican. El servidor autoriza, valida,
 audita y coordina las operaciones de Storage con PostgreSQL, incluyendo fallos
 y reintentos.
@@ -35,8 +38,10 @@ del kardex, sin distinguir mayúsculas y minúsculas y sin alterar los espacios
 ni el identificador original. Kardex diferentes siguen siendo registros
 distintos, incluso cuando coinciden al buscar. Se puede escribir el kardex
 completo en el mismo campo. Se muestran coincidencias paginadas al desplazarse,
-con fotografía si existe e identificación de la ubicación; al seleccionar una
-se abre su ficha. La interfaz indica carga, ausencia de resultados y errores,
+con fotografía si existe y usuario creador; al seleccionar una se abre su ficha
+con la fecha de creación. Para datos históricos que no puedan atribuirse se
+indica que el usuario o fecha son desconocidos. La interfaz indica carga,
+ausencia de resultados y errores,
 limita las solicitudes mientras se escribe y descarta respuestas obsoletas.
 La consulta parcial y las fotografías requieren `ubicaciones.consultar`; la
 consulta exacta necesaria para registrar conserva sus permisos actuales.

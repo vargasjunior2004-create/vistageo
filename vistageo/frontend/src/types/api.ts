@@ -23,6 +23,8 @@ export type Location = {
   id: number
   kardex: string
   revision_actual_id: number | null
+  creado_en: string | null
+  creado_por_nombre: string | null
 }
 
 export type LocationRevision = {

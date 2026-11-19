@@ -162,6 +162,8 @@ class LocationRead(BaseModel):
     id: int
     kardex: str
     revision_actual_id: int | None
+    creado_en: datetime | None = None
+    creado_por_nombre: str | None = None
 
 
 class LocationRevisionCreate(RequestModel):

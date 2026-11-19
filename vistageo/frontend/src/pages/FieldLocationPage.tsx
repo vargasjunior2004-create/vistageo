@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -8,20 +8,24 @@ import { Input } from '../components/Input'
 import { deleteDraft, getDraft, saveDraft, type LocationDraft } from '../services/localPhotos'
 import { encodeOfficialPhoto } from '../services/officialPhoto'
 import { googleMapsLink } from '../services/maps'
-import type { Contract, Location } from '../types/api'
+import type { Location } from '../types/api'
 
 export function FieldLocationPage() {
   const { user, hasPermission } = useAuth()
   const [kardex, setKardex] = useState('')
   const [checked, setChecked] = useState<string | null>(null)
   const [location, setLocation] = useState<Location | null>(null)
-  const [contractExists, setContractExists] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState('')
+  const [retryCheck, setRetryCheck] = useState(0)
+  const checkController = useRef<AbortController | null>(null)
   const [photo, setPhoto] = useState('')
   const [position, setPosition] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null)
   const [draft, setDraft] = useState<LocationDraft | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const allowed = hasPermission('ubicaciones.registrar')
 
   useEffect(() => {
     if (!user) return
@@ -29,29 +33,28 @@ export function FieldLocationPage() {
       .catch((err: Error) => setError(err.message))
   }, [user])
 
-  const search = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setError('')
-    setMessage('')
-    setChecked(null)
-    setLocation(null)
-    setBusy(true)
-    try {
+  useEffect(() => {
+    if (!allowed || draft || !kardex) return
+    const controller = new AbortController()
+    checkController.current = controller
+    const timer = window.setTimeout(() => {
       const params = new URLSearchParams({ kardex })
-      const [locations, contracts] = await Promise.all([
-        apiRequest<Location[]>(`/ubicaciones?${params}`, { activity: true }),
-        apiRequest<Contract[]>(`/contratos?${params}`, { activity: true }),
-      ])
-      const found = locations[0] ?? null
-      setLocation(found)
-      setContractExists(contracts.length > 0)
-      setChecked(kardex)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo consultar el kardex.')
-    } finally {
-      setBusy(false)
+      apiRequest<Location[]>(`/ubicaciones?${params}`, { signal: controller.signal, activity: true })
+        .then((locations) => {
+          if (controller.signal.aborted) return
+          setLocation(locations[0] ?? null)
+          setChecked(kardex)
+        })
+        .catch((err: unknown) => {
+          if (!controller.signal.aborted) setCheckError(err instanceof Error ? err.message : 'No se pudo consultar el kardex.')
+        })
+        .finally(() => { if (!controller.signal.aborted) setChecking(false) })
+    }, 350)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
     }
-  }
+  }, [allowed, draft, kardex, retryCheck])
 
   const capture = async (file: File) => {
     setError('')
@@ -124,7 +127,7 @@ export function FieldLocationPage() {
     }
   }
 
-  if (!hasPermission('ubicaciones.registrar')) return <p>No tienes permiso para esta función.</p>
+  if (!allowed) return <p>No tienes permiso para esta función.</p>
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -145,17 +148,22 @@ export function FieldLocationPage() {
           }}>Descartar borrador local</Button>
         </div>
       ) : (
-        <form onSubmit={search} className="flex flex-wrap items-end gap-3 rounded-3xl bg-white p-5 shadow-sm">
-          <div className="min-w-0 flex-1"><Input label="Kardex exacto" value={kardex} disabled={busy} onChange={(event) => {
-            setKardex(event.target.value); setChecked(null); setLocation(null); setPosition(null); setPhoto('')
-          }} required /></div>
-          <Button type="submit" disabled={busy}>Verificar kardex</Button>
-        </form>
+        <div className="rounded-3xl bg-white p-5 shadow-sm">
+          <Input label="Kardex exacto" value={kardex} disabled={busy} onChange={(event) => {
+            const value = event.target.value
+            checkController.current?.abort()
+            setKardex(value); setChecked(null); setLocation(null); setPosition(null); setPhoto('')
+            setError(''); setMessage(''); setCheckError(''); setChecking(value.length > 0)
+          }} required />
+          {checking && <p role="status" className="mt-2 text-sm text-slate-600">Comprobando kardex...</p>}
+          {checkError && <div role="alert" className="mt-2 text-sm text-red-700">
+            <p>{checkError}</p>
+            <Button type="button" variant="secondary" onClick={() => { setCheckError(''); setChecking(true); setRetryCheck((value) => value + 1) }}>Reintentar</Button>
+          </div>}
+        </div>
       )}
       {!draft && checked !== null && !location && (
-        <p className="rounded-xl bg-blue-50 p-4 text-blue-900">
-          {contractExists ? 'Contrato encontrado. Puedes registrar su ubicación.' : 'Contrato nuevo: se creará al confirmar.'}
-        </p>
+        <p className="rounded-xl bg-blue-50 p-4 text-blue-900">Este kardex está disponible para registrar una ubicación.</p>
       )}
       {!draft && location && (
         <div className="space-y-3 rounded-3xl bg-white p-5 shadow-sm">

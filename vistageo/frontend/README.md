@@ -56,12 +56,18 @@ datos automáticamente.
   conexión, se conserva un borrador local por usuario para reintentar con la
   misma operación; descartarlo puede requerir revisión manual en el servidor.
 - El registro ofrece cámara o archivo, vista previa, enlace de Google Maps y
-  resumen antes de confirmar. La verificación de kardex es exacta.
+  resumen antes de confirmar. La verificación automática de kardex es exacta
+  y no requiere consultar contratos desde el formulario.
 - Consultar ubicación busca automáticamente por una parte literal o por todo
   el kardex, sin distinguir mayúsculas y sin modificar espacios. Las
   coincidencias se cargan al desplazarse y cada una abre su ficha; las fotos
   se solicitan solo al acercarse a los resultados visibles. Kardex que solo
   difieren por mayúsculas siguen siendo registros independientes.
+- Los resultados y la ficha muestran el usuario creador; la ficha muestra
+  también la fecha de creación. Si no se conoce alguno de esos datos se indica
+  como desconocido. El nombre mostrado es el nombre actual de la cuenta.
+- Las herramientas administrativas de contratos y procedencia se conservan,
+  pero no aparecen en el menú cotidiano.
 - En la ficha se puede reemplazar una foto existente con los permisos de
   consulta y edición. Tras confirmarlo, la copia anterior se elimina
   definitivamente, también si es histórica. Si falla la limpieza, se informa
@@ -83,5 +89,5 @@ datos automáticamente.
   privadas de la API. Comprueba el funcionamiento offline en el dispositivo
   después de visitar la aplicación con conexión.
 - Antes de habilitar las funciones en una base existente hay que revisar y
-  autorizar por separado las revisiones de permisos `0005` y `0006`, según el
+  autorizar por separado las revisiones `0005`, `0006` y `0007`, según el
   estado de esa base; el despliegue no las aplica.

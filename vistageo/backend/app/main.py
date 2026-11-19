@@ -354,7 +354,7 @@ def create_location(data: LocationCreate, actor: User = Depends(current_user), d
     require_admin(actor)
     if db.get(Contract, data.kardex) is None:
         raise HTTPException(status_code=404, detail="Contrato no encontrado")
-    location = Location(kardex=data.kardex)
+    location = Location(kardex=data.kardex, creado_por=actor.id, creado_en=now_utc())
     db.add(location)
     try:
         db.flush()
@@ -385,8 +385,9 @@ def list_locations(
     actor: User = Depends(current_user),
     db: Session = Depends(get_db),
     kardex_contiene: str | None = None,
-) -> list[Location]:
-    if kardex is not None and kardex_contiene is None and actor.role.name != ADMIN and "ubicaciones.consultar" not in {p.name for p in actor.role.permissions}:
+) -> list[LocationRead]:
+    can_consult = actor.role.name == ADMIN or "ubicaciones.consultar" in {p.name for p in actor.role.permissions}
+    if kardex is not None and kardex_contiene is None and not can_consult:
         require_permission(actor, "ubicaciones.registrar")
     else:
         require_permission(actor, "ubicaciones.consultar")
@@ -395,6 +396,8 @@ def list_locations(
     query = select(Location).order_by(Location.id).limit(limit).offset(offset)
     if kardex is not None:
         validate_kardex_query(kardex)
+        if not kardex.strip():
+            raise HTTPException(status_code=422, detail="Kardex inválido")
         query = query.where(Location.kardex == kardex)
     if kardex_contiene is not None:
         validate_kardex_query(kardex_contiene)
@@ -407,7 +410,11 @@ def list_locations(
             query = query.where(func.strpos(search_column, search_text) > 0)
         else:
             query = query.where(Location.kardex.icontains(kardex_contiene, autoescape=True))
-    return list(db.scalars(query).all())
+    locations = db.scalars(query).all()
+    if can_consult:
+        return [LocationRead.model_validate(location) for location in locations]
+    return [LocationRead(id=location.id, kardex=location.kardex, revision_actual_id=location.revision_actual_id)
+            for location in locations]
 
 
 @app.get("/ubicaciones/{location_id}", response_model=LocationRead)

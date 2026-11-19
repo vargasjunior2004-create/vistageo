@@ -112,6 +112,13 @@ class Location(Base):
     id: Mapped[int] = mapped_column(pk_type, Identity(), primary_key=True)
     kardex: Mapped[str] = mapped_column(exact_text, ForeignKey("contratos.kardex", ondelete="RESTRICT"), unique=True)
     revision_actual_id: Mapped[int | None] = mapped_column(pk_type)
+    creado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
+    creador: Mapped[User | None] = relationship(lazy="selectin")
+
+    @property
+    def creado_por_nombre(self) -> str | None:
+        return self.creador.username if self.creador else None
 
 
 class LocationRevision(Base):
