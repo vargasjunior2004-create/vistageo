@@ -237,6 +237,35 @@ referencia rota o huella incorrecta devuelve error, no una foto inexistente.
 
 ## Conexión del frontend y Render
 
+### Un solo Web Service
+
+La opción unificada conserva FastAPI y publica React y la API desde el mismo
+origen. El `Dockerfile` de `vistageo/` compila el frontend con
+`VITE_API_URL=/api`; `app.unified:app` monta la API bajo `/api`, sirve sus
+archivos estáticos y devuelve la aplicación para las rutas de React. La
+documentación de la API queda en `/api/docs`. Las URLs antiguas de API sin
+prefijo corresponden al modo separado descrito más abajo, no al unificado.
+Los archivos del service worker no cachean respuestas de `/api`.
+
+En Render, usar runtime **Docker**, raíz `vistageo` y ruta al Dockerfile
+`./Dockerfile` relativa a esa raíz. Al cambiar el servicio existente desde
+Settings → Source, comprobar esos valores antes de desplegar. El comando de
+inicio está en el Dockerfile; no se requieren Node ni un Static Site aparte.
+La imagen no contiene `.env`, certificados ni datos históricos.
+
+Configurar en el servicio `DATABASE_URL`, `SUPABASE_URL` y
+`SUPABASE_SECRET_KEY` de forma privada. La URL PostgreSQL debe conservar
+`sslmode=verify-full` y `sslrootcert` apuntar a un certificado presente en
+Render, por ejemplo `/etc/secrets/supabase-ca.crt` si se configuró como
+Secret File. La ruta local del equipo de desarrollo no existe en Render.
+No se ejecutan migraciones ni se comprueba la conexión al iniciar. Si se usa
+el frontend y la API desde el mismo origen, no se necesita configurar CORS;
+mantener orígenes anteriores únicamente si se pretende conservar acceso desde
+otro frontend. Para volver al modo separado, usar el runtime Python y la
+configuración siguiente.
+
+### Dos servicios
+
 Para orígenes diferentes, configurar `CORS_ORIGINS` en el entorno del backend
 con una lista separada por comas de orígenes exactos (sin rutas ni barra
 final), por ejemplo `http://localhost:5173`. En Render usar el origen HTTPS

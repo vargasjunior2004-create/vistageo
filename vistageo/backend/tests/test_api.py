@@ -15,6 +15,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, User
 from app.security import PERMISSIONS, password_hash
+from app.unified import create_unified_app
 
 
 @pytest.fixture
@@ -58,6 +59,37 @@ def headers(client, username="admin", password="testpass1"):
     response = login(client, username, password)
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def test_unified_serves_frontend_and_preserves_api_routes(api, tmp_path):
+    _, _factory = api
+    (tmp_path / "index.html").write_text("<html>frontend</html>")
+    (tmp_path / "service-worker.js").write_text("worker")
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "app.js").write_text("app")
+    with TestClient(create_unified_app(tmp_path)) as client:
+        for path in ("/", "/login", "/usuarios", "/jornada/fotos"):
+            response = client.get(path)
+            assert response.status_code == 200 and response.text == "<html>frontend</html>"
+            assert response.headers["cache-control"] == "no-cache"
+        assert client.head("/").status_code == 200
+        assert client.get("/api/usuarios").status_code == 401
+        assert client.get("/api/inexistente").status_code == 404
+        token = client.post("/api/auth/login", json={"username": "admin", "password": "testpass1"})
+        assert token.status_code == 200
+        auth = {"Authorization": f"Bearer {token.json()['access_token']}"}
+        assert client.get("/api/auth/me", headers=auth).json()["username"] == "ADMIN"
+        assert client.get("/api/docs").status_code == 200
+        assert client.get("/assets/app.js").text == "app"
+        assert client.get("/assets/missing.js").status_code == 404
+        assert client.get("/missing.js").status_code == 404
+        assert client.get("/service-worker.js").headers["cache-control"] == "no-cache"
+
+
+def test_unified_rejects_missing_frontend(tmp_path):
+    with pytest.raises(RuntimeError, match="frontend no está disponible"):
+        with TestClient(create_unified_app(tmp_path)):
+            pass
 
 
 def test_login_logout_and_uniform_failures(api):

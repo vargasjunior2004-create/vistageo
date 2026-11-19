@@ -43,7 +43,7 @@ export function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value.toUpperCase())}
             autoComplete="username"
-            placeholder="JUNIOR"
+            placeholder="Usuario"
             required
           />
           {location.state?.passwordChanged && <p className="text-sm text-teal-700">Contraseña actualizada. Inicia sesión nuevamente.</p>}

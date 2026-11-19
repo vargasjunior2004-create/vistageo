@@ -23,6 +23,13 @@ origen; no incluye ninguna clave de Supabase.
 
 ## Render
 
+Para servir frontend y API en un solo Web Service, usar el Dockerfile y las
+instrucciones de [despliegue unificado](../backend/README.md#un-solo-web-service).
+La aplicación se compila con `VITE_API_URL=/api`; no se debe configurar una
+URL externa de API en ese build.
+
+Como alternativa, con dos servicios:
+
 Crear un **Static Site** con raíz `vistageo/frontend`, build `npm ci && npm run
 build` y directorio publicado `dist`. Configurar en el sitio `VITE_API_URL`
 con la URL HTTPS pública del Web Service de FastAPI, sin barra final, antes
