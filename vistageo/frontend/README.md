@@ -51,6 +51,8 @@ datos automáticamente.
 - El token se guarda en `localStorage`; cerrar sesión lo elimina.
 - Las acciones deliberadas envían `X-Actividad-Usuario: true`.
 - El frontend no sustituye la autorización del backend; todos los permisos se verifican en la API.
+- La navegación lateral se adapta a móviles y puede contraerse en escritorio.
+  Las opciones de trabajo se muestran según los permisos y roles existentes.
 - El panel muestra registro y consulta de ubicaciones según sus permisos.
   La fotografía oficial y el GPS se guardan mediante el backend. Si falla la
   conexión, se conserva un borrador local por usuario para reintentar con la

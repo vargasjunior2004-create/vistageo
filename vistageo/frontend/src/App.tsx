@@ -18,7 +18,7 @@ function LocalJornada({ mode }: { mode: 'camera' | 'gallery' }) {
   if (localStorage.getItem('vistageo_jornada_habilitada') !== 'true') {
     return <div className="p-6">Inicia sesión con conexión al menos una vez para activar las fotos locales. <a href="/login">Iniciar sesión</a></div>
   }
-  return <JornadaPage mode={mode} />
+  return <Layout local><JornadaPage mode={mode} /></Layout>
 }
 
 export default function App() {

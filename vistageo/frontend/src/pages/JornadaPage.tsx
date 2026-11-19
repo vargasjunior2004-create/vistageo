@@ -94,7 +94,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5 px-4 py-6">
+    <div className="mx-auto max-w-4xl space-y-5">
       <header className="rounded-3xl bg-[#102c50] p-5 text-white">
         <p className="text-sm text-blue-200">VISTA GEO · Jornada local</p>
         <h1 className="mt-1 text-2xl font-bold">{mode === 'camera' ? 'Sacar fotos' : 'Mis fotos'}</h1>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
+import { Icon } from '../components/Icon'
 import { Input } from '../components/Input'
 
 export function LoginPage() {
@@ -31,13 +32,13 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 text-xl font-bold text-white shadow-xl shadow-teal-600/30">
-            VG
+          <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#102c50] text-white">
+            <Icon name="locations" className="h-8 w-8" />
           </span>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900">VISTA GEO</h1>
+          <h1 className="font-display mt-4 text-3xl font-bold tracking-tight text-[#102c50]">VISTA GEO</h1>
           <p className="mt-1 text-sm text-slate-500">Acceso al panel técnico</p>
         </div>
-        <form onSubmit={submit} className="space-y-5 rounded-3xl bg-white p-7 shadow-xl shadow-slate-200/60 ring-1 ring-slate-100">
+        <form onSubmit={submit} className="space-y-5 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
           <Input
             label="Usuario"
             value={username}
@@ -46,7 +47,7 @@ export function LoginPage() {
             placeholder="Usuario"
             required
           />
-          {location.state?.passwordChanged && <p className="text-sm text-teal-700">Contraseña actualizada. Inicia sesión nuevamente.</p>}
+          {location.state?.passwordChanged && <p className="text-sm text-blue-700">Contraseña actualizada. Inicia sesión nuevamente.</p>}
           {location.state?.sessionExpired && <p className="text-sm text-rose-600">La sesión venció o fue revocada. Inicia sesión nuevamente.</p>}
           <Input
             label="Contraseña"

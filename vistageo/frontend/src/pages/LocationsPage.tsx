@@ -114,7 +114,7 @@ export function LocationsPage() {
             <button
               key={loc.id}
               onClick={() => setSelected(loc)}
-              className={`rounded-2xl p-4 text-left shadow transition ${selected?.id === loc.id ? 'bg-teal-50 ring-2 ring-teal-500' : 'bg-white hover:bg-slate-50'}`}
+              className={`rounded-2xl p-4 text-left shadow transition ${selected?.id === loc.id ? 'bg-blue-50 ring-2 ring-blue-600' : 'bg-white hover:bg-slate-50'}`}
             >
               <p className="font-semibold text-slate-900">#{loc.id}</p>
               <p className="text-sm text-slate-600">{loc.kardex}</p>
