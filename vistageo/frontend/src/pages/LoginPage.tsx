@@ -44,7 +44,7 @@ export function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value.toUpperCase())}
             autoComplete="username"
-            placeholder="Usuario"
+            placeholder="Ingresa tu nombre de usuario"
             required
           />
           {location.state?.passwordChanged && <p className="text-sm text-blue-700">Contraseña actualizada. Inicia sesión nuevamente.</p>}
@@ -55,7 +55,7 @@ export function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value.toUpperCase())}
             autoComplete="current-password"
-            placeholder="••••••••"
+            placeholder="Ingresa tu contraseña"
             required
           />
           {error && (
@@ -68,7 +68,7 @@ export function LoginPage() {
           </Button>
         </form>
         <p className="mt-6 text-center text-xs text-slate-400">
-          Las credenciales se convierten a mayúsculas automáticamente.
+          Solicita tus credenciales al administrador del sistema.
         </p>
         {localStorage.getItem('vistageo_jornada_habilitada') === 'true' && (
           <p className="mt-4 text-center text-sm"><Link className="font-semibold text-blue-700" to="/jornada/camara">Abrir fotos de jornada en este dispositivo</Link></p>
