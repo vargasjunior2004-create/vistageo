@@ -63,12 +63,15 @@ actual, conservando las revisiones anteriores, e incorpora el permiso
 `ubicaciones.gps.editar` sin asignarlo a ningún rol. Añade la referencia al
 motivo y la idempotencia a la auditoría. Los datos sin revisión vigente
 conservan valores GPS nulos.
+`0010_coordinate_methods` añade el método de coordenadas a la ubicación
+vigente y a sus revisiones. Los valores existentes permanecen desconocidos;
+no se atribuye una captura presencial a datos históricos.
 Una actualización Alembic normal desde `0004` ejecuta las asignaciones de
 `0005` y `0006`; no debe utilizarse cuando se haya decidido conservar
 exactamente los permisos actuales sin preparar y verificar un procedimiento
 transaccional específico.
 `sql/esquema_postgresql.sql` es la salida de `alembic upgrade head --sql` para
-una **base nueva y vacía**: incluye las nueve revisiones y `alembic_version`.
+una **base nueva y vacía**: incluye las diez revisiones y `alembic_version`.
 No ejecutar ese script sobre un esquema ya existente; para actualizar una
 instalación existente se utiliza Alembic desde su revisión actual, previa
 autorización y copia de seguridad. No ejecutar el SQL y Alembic como dos
@@ -99,8 +102,8 @@ para el dialecto PostgreSQL, sin conectar al servidor:
 | `roles` / `Role`, `permisos` / `Permission`, `rol_permisos` | Catálogo de roles y permisos; cada usuario tiene exactamente un rol y cada rol puede tener varios permisos. |
 | `usuarios` / `User`, `sesiones` / `AuthSession`, `auditoria_usuarios` / `AuditEvent` | Cuentas, sesiones y auditoría del módulo existente. |
 | `contratos` / `Contract` | `kardex` textual es clave primaria con colación `C`: se conserva sin normalización y solo se rechazan duplicados exactos y valores vacíos. |
-| `ubicaciones` / `Location` | Como máximo una por contrato; conserva creador, fecha y GPS vigentes, y una versión para detectar cambios concurrentes. La referencia a revisión histórica debe pertenecer a la ubicación y estar cerrada. |
-| `revisiones_ubicacion` / `LocationRevision` | Historial de URL y coordenadas; autor y fecha del evento histórico pueden ser desconocidos. Coordenadas juntas y dentro de sus rangos; las revisiones cerradas no se editan ni eliminan. |
+| `ubicaciones` / `Location` | Como máximo una por contrato; conserva creador, fecha, coordenadas y método vigentes, y una versión para detectar cambios concurrentes. La referencia a revisión histórica debe pertenecer a la ubicación y estar cerrada. |
+| `revisiones_ubicacion` / `LocationRevision` | Historial de URL, coordenadas y método; autor y fecha del evento histórico pueden ser desconocidos. Coordenadas juntas y dentro de sus rangos; las revisiones cerradas no se editan ni eliminan. |
 | `fotografias` / `Photograph` | Una fotografía vigente como máximo por ubicación, con referencia al objeto, huella y usuario; en una importación histórica conserva además procedencia y huella original. No contiene la imagen. |
 | `operaciones_fotografia` / `PhotoOperation` | Estado persistente, claves exactas, idempotencia e intentos para coordinación con Storage; `fotografia_id` es informativo, sin FK, para sobrevivir al borrado. |
 | `motivos_actualizacion` / `UpdateReason` | Catálogo de motivos activos e inactivos; no se eliminan mediante la API. Los eventos conservan además el nombre del motivo al momento del cambio. |
@@ -184,7 +187,26 @@ copias de fotografías. Las revisiones históricas se conservan sin añadir
 revisiones en este flujo. El historial es consultable por quienes pueden
 consultar la ubicación; el trigger existente impide modificarlo o borrarlo.
 Al actualizar GPS se borra la URL vigente anterior, que permanece en su
-revisión histórica si procedía de ella.
+revisión histórica si procedía de ella. El método vigente queda desconocido
+en este flujo de actualización, que no transmite la procedencia; la revisión
+inicial conserva su método y su enlace.
+
+El registro inicial exige seleccionar `GPS_DISPOSITIVO` o
+`ENLACE_COMPARTIDO`, confirmar las coordenadas y adjuntar una fotografía válida.
+La API exige ahora `metodo_coordenadas` y `coordenadas_confirmadas: true`;
+los clientes anteriores deben actualizarse antes de registrar nuevas
+ubicaciones. El backend y el frontend deben desplegarse coordinadamente.
+La procedencia es una declaración del usuario, no una prueba criptográfica de
+presencia. El servidor interpreta enlaces HTTPS de Google Maps con coordenadas
+puntuales y marcadores `mlat`/`mlon` de OpenStreetMap. Los enlaces cortos de
+`maps.app.goo.gl` y `goo.gl/maps/` se resuelven con destinos permitidos,
+TLS verificado y direcciones públicas comprobadas y fijadas a la conexión.
+Se rechazan ubicaciones ambiguas o no reconocidas; no se interpreta el centro
+de un mapa como domicilio. La vista previa se solicita nuevamente antes de
+preparar un registro compartido; después de prepararlo, los reintentos usan
+la revisión guardada y comprueban que método, URL y demás datos coincidan.
+Borradores anteriores requieren confirmar el origen; si ya hay una revisión
+cerrada pendiente, se conserva y se crea otra con el origen confirmado.
 
 Storage y PostgreSQL no comparten transacciones. El importador histórico
 implementa la creación recuperable descrita más abajo. El registro de campo

@@ -39,6 +39,7 @@ def update_location(
             location.latitud = data.latitud
             location.longitud = data.longitud
             location.url_gps = None
+            location.metodo_coordenadas = None
         location.version += 1
         db.add(AuditRecord(
             usuario_id=actor.id, ubicacion_id=location.id, accion="ACTUALIZAR_DATOS_UBICACION",

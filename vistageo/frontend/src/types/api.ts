@@ -29,6 +29,7 @@ export type Location = {
   latitud: string | null
   longitud: string | null
   url_gps: string | null
+  metodo_coordenadas: 'GPS_DISPOSITIVO' | 'ENLACE_COMPARTIDO' | null
   version: number
 }
 
@@ -48,6 +49,7 @@ export type LocationRevision = {
   id: number
   ubicacion_id: number
   url_gps: string | null
+  metodo_coordenadas: 'GPS_DISPOSITIVO' | 'ENLACE_COMPARTIDO' | null
   latitud: string | null
   longitud: string | null
   fecha_evento: string | null

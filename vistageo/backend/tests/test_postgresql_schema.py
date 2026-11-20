@@ -480,7 +480,7 @@ def test_registro_campo_en_postgresql_preserva_auditoria_y_reintentos(db):
     Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
     data = FieldLocationCreate(
         kardex="campo Ab-1 ", idempotencia=uuid4(), latitud="-16.5", longitud="-68.1",
-        fotografia_base64=base64.b64encode(image.getvalue()).decode(),
+        fotografia_base64=base64.b64encode(image.getvalue()).decode(), metodo_coordenadas="GPS_DISPOSITIVO", coordenadas_confirmadas=True,
     )
 
     class FakeStorage:
@@ -497,12 +497,63 @@ def test_registro_campo_en_postgresql_preserva_auditoria_y_reintentos(db):
         location = register_location(data, actor, session, FakeStorage())
         assert location.kardex == data.kardex
         assert location.revision_actual_id is not None
+        assert location.metodo_coordenadas == "GPS_DISPOSITIVO"
+        rejected(db, "UPDATE ubicaciones SET url_gps='https://example.test' WHERE id=:id", {"id": location.id})
+        rejected(db, "UPDATE ubicaciones SET metodo_coordenadas='ENLACE_COMPARTIDO' WHERE id=:id", {"id": location.id})
         assert location.creado_por == actor_id and location.creado_en is not None
         rejected(db, "UPDATE ubicaciones SET creado_por=NULL WHERE id=:id", {"id": location.id})
         rejected(db, "UPDATE ubicaciones SET creado_en=CURRENT_TIMESTAMP + interval '1 day' WHERE id=:id", {"id": location.id})
         assert db.execute(text("SELECT registrado_por FROM fotografias WHERE ubicacion_id=:id"), {"id": location.id}).scalar_one() == actor_id
         assert db.execute(text("SELECT count(*) FROM auditoria WHERE usuario_id=:actor AND ubicacion_id=:id AND accion='CREAR_FOTOGRAFIA'"),
                           {"actor": actor_id, "id": location.id}).scalar_one() == 1
+
+
+def test_borrador_antiguo_preserva_revision_cerrada_en_postgresql(db):
+    from app.models import Contract, Location, LocationRevision, PhotoOperation
+    from app.registro_ubicacion import optimize_photo
+    from app.storage import BUCKET
+
+    actor_id = create_user(db, "borrador-operador")
+    factory = sessionmaker(bind=db, expire_on_commit=False, join_transaction_mode="create_savepoint")
+    image = io.BytesIO()
+    Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
+    data = FieldLocationCreate(
+        kardex="borrador-antiguo", idempotencia=uuid4(), latitud=1, longitud=2,
+        fotografia_base64=base64.b64encode(image.getvalue()).decode(),
+        metodo_coordenadas="GPS_DISPOSITIVO", coordenadas_confirmadas=True,
+    )
+    digest = hashlib.sha256(optimize_photo(data.fotografia_base64)).hexdigest()
+
+    class FakeStorage:
+        content = None
+
+        def get(self, key):
+            return self.content
+
+        def put(self, key, content):
+            self.content = content
+
+    with factory() as session:
+        session.add(Contract(kardex=data.kardex))
+        session.flush()
+        location = Location(kardex=data.kardex, creado_por=actor_id)
+        session.add(location)
+        session.flush()
+        session.add(LocationRevision(ubicacion_id=location.id, latitud=1, longitud=2, responsable_id=actor_id, cerrada=True))
+        session.add(PhotoOperation(
+            idempotencia=data.idempotencia, ubicacion_id=location.id, usuario_id=actor_id,
+            tipo="CREAR", estado="preparada", nuevo_bucket=BUCKET,
+            nueva_clave=f"registros/v1/{data.idempotencia}/{digest}.webp",
+        ))
+        session.commit()
+        result = register_location(data, session.get(User, actor_id), session, FakeStorage())
+        revisions = session.scalars(select(LocationRevision).where(
+            LocationRevision.ubicacion_id == location.id,
+        ).order_by(LocationRevision.id)).all()
+        assert [revision.metodo_coordenadas for revision in revisions] == [None, "GPS_DISPOSITIVO"]
+        assert result.revision_actual_id == revisions[-1].id
+        rejected(db, "UPDATE revisiones_ubicacion SET metodo_coordenadas='GPS_DISPOSITIVO' WHERE id=:id",
+                 {"id": revisions[0].id})
 
 
 def test_api_usuarios_y_roles_en_postgresql(db, monkeypatch):

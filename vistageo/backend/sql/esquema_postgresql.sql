@@ -740,5 +740,21 @@ INSERT INTO permisos (nombre) VALUES ('ubicaciones.gps.editar') ON CONFLICT (nom
 
 UPDATE alembic_version SET version_num='0009_current_location_updates' WHERE alembic_version.version_num = '0008_update_reasons';
 
+-- Running upgrade 0009_current_location_updates -> 0010_coordinate_methods
+
+ALTER TABLE ubicaciones ADD COLUMN metodo_coordenadas VARCHAR(32);
+
+ALTER TABLE ubicaciones ADD CONSTRAINT ubicaciones_metodo_valido CHECK (metodo_coordenadas IS NULL OR metodo_coordenadas IN ('GPS_DISPOSITIVO', 'ENLACE_COMPARTIDO'));
+
+ALTER TABLE ubicaciones ADD CONSTRAINT ubicaciones_metodo_contenido CHECK (metodo_coordenadas IS NULL OR (latitud IS NOT NULL AND longitud IS NOT NULL AND ((metodo_coordenadas = 'GPS_DISPOSITIVO' AND url_gps IS NULL) OR (metodo_coordenadas = 'ENLACE_COMPARTIDO' AND url_gps IS NOT NULL AND length(trim(url_gps)) > 0))));
+
+ALTER TABLE revisiones_ubicacion ADD COLUMN metodo_coordenadas VARCHAR(32);
+
+ALTER TABLE revisiones_ubicacion ADD CONSTRAINT revisiones_metodo_valido CHECK (metodo_coordenadas IS NULL OR metodo_coordenadas IN ('GPS_DISPOSITIVO', 'ENLACE_COMPARTIDO'));
+
+ALTER TABLE revisiones_ubicacion ADD CONSTRAINT revisiones_metodo_contenido CHECK (metodo_coordenadas IS NULL OR (latitud IS NOT NULL AND longitud IS NOT NULL AND ((metodo_coordenadas = 'GPS_DISPOSITIVO' AND url_gps IS NULL) OR (metodo_coordenadas = 'ENLACE_COMPARTIDO' AND url_gps IS NOT NULL AND length(trim(url_gps)) > 0))));
+
+UPDATE alembic_version SET version_num='0010_coordinate_methods' WHERE alembic_version.version_num = '0009_current_location_updates';
+
 COMMIT;
 

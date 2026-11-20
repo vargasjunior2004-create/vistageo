@@ -10,6 +10,9 @@ export type LocationDraft = {
   latitud: string
   longitud: string
   fotografia_base64: string
+  metodo_coordenadas?: 'GPS_DISPOSITIVO' | 'ENLACE_COMPARTIDO'
+  coordenadas_confirmadas?: true
+  url_gps?: string | null
 }
 
 export type PhotoReplacementDraft = {

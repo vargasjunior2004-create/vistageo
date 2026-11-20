@@ -10,6 +10,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.enlaces_gps import resolve_map_url
 from app.models import AuditRecord, Contract, Location, LocationRevision, PhotoOperation, Photograph, User, now_utc
 from app.schemas import FieldLocationCreate
 from app.storage import BUCKET, Storage
@@ -42,6 +43,7 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
     key = f"registros/v1/{data.idempotencia}/{digest}.webp"
     operation = db.scalar(select(PhotoOperation).where(PhotoOperation.idempotencia == data.idempotencia).with_for_update())
     if operation is None:
+        validate_shared_coordinates(data)
         if db.scalar(select(Location.id).where(Location.kardex == data.kardex)) is not None:
             raise HTTPException(status_code=409, detail="El kardex ya tiene una ubicación")
         contract = db.get(Contract, data.kardex)
@@ -54,7 +56,8 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
             db.flush()
             revision = LocationRevision(
                 ubicacion_id=location.id, latitud=data.latitud, longitud=data.longitud,
-                responsable_id=actor.id, cerrada=True,
+                responsable_id=actor.id, cerrada=True, metodo_coordenadas=data.metodo_coordenadas,
+                url_gps=data.url_gps,
             )
             db.add(revision)
             db.flush()
@@ -73,15 +76,29 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
 
     location = db.get(Location, operation.ubicacion_id)
     revision = db.scalar(select(LocationRevision).where(LocationRevision.ubicacion_id == operation.ubicacion_id)
-                         .order_by(LocationRevision.id).limit(1))
+                         .order_by(LocationRevision.id.desc()).limit(1))
     if (location is None or revision is None or location.kardex != data.kardex
             or operation.usuario_id != actor.id or operation.nueva_clave != key
             or revision.latitud != data.latitud or revision.longitud != data.longitud):
+        raise HTTPException(status_code=409, detail="La operación no coincide con el registro original")
+    if revision.metodo_coordenadas is not None and (
+        revision.metodo_coordenadas != data.metodo_coordenadas or revision.url_gps != data.url_gps
+    ):
         raise HTTPException(status_code=409, detail="La operación no coincide con el registro original")
     if operation.estado == "finalizada":
         return location
     if operation.estado not in ("preparada", "objeto_listo"):
         raise HTTPException(status_code=409, detail="La operación requiere revisión")
+    if revision.metodo_coordenadas is None:
+        validate_shared_coordinates(data)
+        revision = LocationRevision(
+            ubicacion_id=location.id, latitud=data.latitud, longitud=data.longitud,
+            responsable_id=actor.id, cerrada=True, metodo_coordenadas=data.metodo_coordenadas,
+            url_gps=data.url_gps,
+        )
+        db.add(revision)
+        db.commit()
+        operation = db.scalar(select(PhotoOperation).where(PhotoOperation.idempotencia == data.idempotencia).with_for_update())
 
     try:
         remote = storage.get(key)
@@ -97,7 +114,7 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
 
     location = db.scalar(select(Location).where(Location.id == operation.ubicacion_id).with_for_update())
     revision = db.scalar(select(LocationRevision).where(LocationRevision.ubicacion_id == location.id)
-                         .order_by(LocationRevision.id).limit(1))
+                         .order_by(LocationRevision.id.desc()).limit(1))
     if operation.estado == "finalizada":
         return location
     existing_photo = db.scalar(select(Photograph.id).where(Photograph.ubicacion_id == location.id))
@@ -119,6 +136,7 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
     location.latitud = revision.latitud
     location.longitud = revision.longitud
     location.url_gps = revision.url_gps
+    location.metodo_coordenadas = revision.metodo_coordenadas
     operation.fotografia_id = photo.id
     operation.estado = "finalizada"
     operation.intentos += 1
@@ -126,3 +144,15 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
                        detalles={"revision_id": revision.id}))
     db.commit()
     return location
+
+
+def validate_shared_coordinates(data: FieldLocationCreate) -> None:
+    if data.metodo_coordenadas == "ENLACE_COMPARTIDO":
+        if data.url_gps is None:
+            raise HTTPException(status_code=422, detail="Se requiere el enlace compartido")
+        try:
+            coordinates = resolve_map_url(data.url_gps)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if coordinates != (data.latitud, data.longitud):
+            raise HTTPException(status_code=422, detail="Las coordenadas no coinciden con el enlace compartido")

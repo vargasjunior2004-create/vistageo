@@ -57,8 +57,13 @@ datos automáticamente.
   La fotografía oficial y el GPS se guardan mediante el backend. Si falla la
   conexión, se conserva un borrador local por usuario para reintentar con la
   misma operación; descartarlo puede requerir revisión manual en el servidor.
-- El registro ofrece cámara o archivo, vista previa, enlace de Google Maps y
-  resumen antes de confirmar. La verificación automática de kardex es exacta
+- El registro ofrece cámara o archivo y exige elegir entre GPS del dispositivo
+  y un enlace compartido; muestra un mapa y exige confirmar el punto. La
+  fotografía sigue siendo obligatoria. El mapa incrustado de OpenStreetMap
+  recibe las coordenadas para mostrar la vista previa y requiere conexión.
+  Los enlaces aceptados incluyen coordenadas puntuales de Google Maps y
+  marcadores de OpenStreetMap; el servidor puede resolver enlaces cortos
+  compatibles. La verificación automática de kardex es exacta
   y no requiere consultar contratos desde el formulario.
 - Si un registro de campo quedó pendiente, el buscador y la comprobación
   exacta lo indican. El borrador original permite reintentar; si se perdió,
@@ -101,5 +106,5 @@ datos automáticamente.
   privadas de la API. Comprueba el funcionamiento offline en el dispositivo
   después de visitar la aplicación con conexión.
 - Antes de habilitar las funciones en una base existente hay que revisar y
-  autorizar por separado las revisiones pendientes hasta `0009`, según el
+  autorizar por separado las revisiones pendientes hasta `0010`, según el
   estado de esa base; el despliegue no las aplica.

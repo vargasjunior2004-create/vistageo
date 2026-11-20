@@ -17,10 +17,11 @@ from sqlalchemy.orm import Session, lazyload
 
 from app.database import get_db
 from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, UpdateReason, User, as_utc, now_utc
-from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LocationUpdate, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RoleCreate, SessionUserRead, UpdateReasonCreate, UpdateReasonEdit, UpdateReasonRead, UserCreate, UserRead, UserUpdate
+from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LocationUpdate, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RoleCreate, SessionUserRead, SharedLocationRequest, SharedLocationRead, UpdateReasonCreate, UpdateReasonEdit, UpdateReasonRead, UserCreate, UserRead, UserUpdate
 from app.actualizacion_ubicacion import update_location
 from app.fotografia import photo_version, recovery_loop, replace_photo
 from app.registro_ubicacion import register_location
+from app.enlaces_gps import resolve_map_url
 from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, OFFICIAL_ROLES, PERMISSIONS, PERMISSION_MANAGERS, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, token_hash, verify_password
 from app.storage import BUCKET, Storage
 
@@ -376,6 +377,16 @@ def create_field_location(data: FieldLocationCreate, actor: User = Depends(curre
         logger.error("Storage no está disponible: %s", exc)
         raise HTTPException(status_code=503, detail="No se pudo preparar Storage") from exc
     return register_location(data, actor, db, storage)
+
+
+@app.post("/registro-ubicacion/interpretar-enlace", response_model=SharedLocationRead)
+def interpret_shared_location(data: SharedLocationRequest, actor: User = Depends(current_user)) -> SharedLocationRead:
+    require_permission(actor, "ubicaciones.registrar")
+    try:
+        latitude, longitude = resolve_map_url(data.url_gps)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SharedLocationRead(latitud=latitude, longitud=longitude)
 
 
 @app.get("/motivos-actualizacion", response_model=list[UpdateReasonRead])

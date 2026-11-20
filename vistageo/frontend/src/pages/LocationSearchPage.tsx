@@ -7,7 +7,7 @@ import { Input } from '../components/Input'
 import { LocationPhoto } from '../components/LocationPhoto'
 import { UpdateLocation } from '../components/UpdateLocation'
 import { googleMapsLink } from '../services/maps'
-import type { Location, LocationUpdateAudit } from '../types/api'
+import type { Location, LocationRevision, LocationUpdateAudit } from '../types/api'
 
 const PAGE_SIZE = 25
 const DEBOUNCE_MS = 350
@@ -72,6 +72,7 @@ export function LocationSearchPage() {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Location | null>(null)
   const [history, setHistory] = useState<LocationUpdateAudit[]>([])
+  const [revisionResult, setRevisionResult] = useState<{ id: number; revision: LocationRevision | null; error: string } | null>(null)
   const [historyError, setHistoryError] = useState('')
   const [historyMore, setHistoryMore] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -142,6 +143,15 @@ export function LocationSearchPage() {
     return () => controller.abort()
   }, [selectedId, photoRevision])
 
+  useEffect(() => {
+    if (selectedId === undefined || !selected?.revision_actual_id) return
+    const controller = new AbortController()
+    apiRequest<LocationRevision[]>(`/ubicaciones/${selectedId}/revisiones?revision_id=${selected.revision_actual_id}`, { signal: controller.signal })
+      .then((items) => { if (!controller.signal.aborted) setRevisionResult({ id: selectedId, revision: items[0] ?? null, error: '' }) })
+      .catch((err: unknown) => { if (!controller.signal.aborted) setRevisionResult({ id: selectedId, revision: null, error: err instanceof Error ? err.message : 'No se pudo consultar la revisión.' }) })
+    return () => controller.abort()
+  }, [selectedId, selected?.revision_actual_id])
+
   const refreshLocation = async (locationId: number) => {
     setPhotoVersion(null)
     setHistoryLoading(true)
@@ -170,6 +180,8 @@ export function LocationSearchPage() {
 
   if (!allowed) return <p>No tienes permiso para esta función.</p>
   const link = mapsLink(selected)
+  const registrationRevision = revisionResult && revisionResult.id === selectedId ? revisionResult.revision : null
+  const revisionError = revisionResult && revisionResult.id === selectedId ? revisionResult.error : ''
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -214,10 +226,18 @@ export function LocationSearchPage() {
             onUpdated={() => void refreshLocation(selected.id)}
           />}
           {selected.latitud !== null ? <p className="text-sm text-slate-600">{selected.latitud}, {selected.longitud}</p> : <p className="text-sm text-slate-600">No hay coordenadas vigentes.</p>}
+          <p className="text-sm text-slate-600">Origen de las coordenadas vigentes: {selected.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : selected.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
           {selected.url_gps && <p className="break-all text-sm text-slate-600">URL GPS: {selected.url_gps}</p>}
           {link && <><p className="break-all text-sm text-slate-600">Enlace: {link}</p><a className="inline-block rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a></>}
           <section className="space-y-2 border-t border-slate-100 pt-4">
             <h3 className="font-semibold">Historial de actualizaciones</h3>
+            {revisionError && <p role="alert" className="text-sm text-red-700">{revisionError}</p>}
+            {registrationRevision && <div className="rounded-xl bg-slate-50 p-3 text-sm">
+              <p className="font-semibold">Revisión histórica vinculada</p>
+              <p>Origen: {registrationRevision.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : registrationRevision.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
+              <p>{registrationRevision.latitud ?? '—'}, {registrationRevision.longitud ?? '—'} · {new Date(registrationRevision.registrado_en).toLocaleString()}</p>
+              {registrationRevision.url_gps && <p className="break-all">Enlace original: {registrationRevision.url_gps}</p>}
+            </div>}
             {historyError && <p role="alert" className="text-sm text-red-700">{historyError}</p>}
             {historyLoading && <p role="status" className="text-sm text-slate-500">Cargando historial...</p>}
             {!historyLoading && history.length === 0 && !historyError && <p className="text-sm text-slate-600">Aún no hay actualizaciones registradas.</p>}
@@ -249,7 +269,7 @@ export function LocationSearchPage() {
                     <VisibleWhitespace value={location.kardex} />
                     <span className="mt-1 block text-sm text-slate-600">Registrado por: {location.creado_por_nombre ?? 'Desconocido'}</span>
                     {location.registro_pendiente && <span className="mt-1 block text-xs font-semibold text-amber-800">Registro pendiente o requiere revisión</span>}
-                    <span className="mt-1 block text-xs text-slate-500">Ubicación #{location.id} · {location.latitud === null && !location.url_gps ? 'Sin GPS' : 'Con GPS'}</span>
+                    <span className="mt-1 block text-xs text-slate-500">Ubicación #{location.id} · {location.latitud === null && !location.url_gps ? 'Sin coordenadas' : 'Con ubicación'}</span>
                   </span>
                   <span aria-hidden="true" className="text-xl text-blue-700">›</span>
                 </button>

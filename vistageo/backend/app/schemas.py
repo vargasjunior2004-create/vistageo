@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Self
+from typing import Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -149,6 +149,26 @@ class FieldLocationCreate(ContractCreate):
     latitud: Decimal = Field(ge=-90, le=90, allow_inf_nan=False)
     longitud: Decimal = Field(ge=-180, le=180, allow_inf_nan=False)
     fotografia_base64: str = Field(min_length=1, max_length=12 * 1024 * 1024)
+    metodo_coordenadas: Literal["GPS_DISPOSITIVO", "ENLACE_COMPARTIDO"]
+    coordenadas_confirmadas: StrictBool
+    url_gps: str | None = Field(default=None, min_length=1, max_length=4096)
+
+    @model_validator(mode="after")
+    def valid_method(self) -> Self:
+        if not self.coordenadas_confirmadas:
+            raise ValueError("Confirma la ubicación antes de guardar")
+        if (self.metodo_coordenadas == "ENLACE_COMPARTIDO") != (self.url_gps is not None):
+            raise ValueError("El enlace solo corresponde al método de ubicación compartida")
+        return self
+
+
+class SharedLocationRequest(RequestModel):
+    url_gps: str = Field(min_length=1, max_length=4096)
+
+
+class SharedLocationRead(BaseModel):
+    latitud: Decimal
+    longitud: Decimal
 
 
 class PhotographReplace(RequestModel):
@@ -214,6 +234,7 @@ class LocationRead(BaseModel):
     latitud: Decimal | None = None
     longitud: Decimal | None = None
     url_gps: str | None = None
+    metodo_coordenadas: str | None = None
     version: int = 0
 
 
@@ -251,6 +272,7 @@ class LocationRevisionRead(BaseModel):
     id: int
     ubicacion_id: int
     url_gps: str | None
+    metodo_coordenadas: str | None
     latitud: Decimal | None
     longitud: Decimal | None
     fecha_evento: datetime | None

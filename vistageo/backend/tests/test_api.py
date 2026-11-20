@@ -619,7 +619,7 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     image = io.BytesIO()
     Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
     body = {"idempotencia": str(uuid4()), "kardex": "aB-1 ", "latitud": "-16.5", "longitud": "-68.1",
-            "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+            "fotografia_base64": base64.b64encode(image.getvalue()).decode(), "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True}
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "creado_por": 1}).status_code == 422
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "creado_en": "2000-01-01T00:00:00Z"}).status_code == 422
     start = datetime.now(timezone.utc)
@@ -643,6 +643,7 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     response = client.post("/registro-ubicacion", headers=auth, json=body)
     assert response.status_code == 201
     assert response.json()["kardex"] == "aB-1 "
+    assert response.json()["metodo_coordenadas"] == "GPS_DISPOSITIVO"
     assert response.json()["creado_por_nombre"] == "TECH"
     assert start <= as_utc(datetime.fromisoformat(response.json()["creado_en"])) <= datetime.now(timezone.utc)
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 201
@@ -651,6 +652,7 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
         photo = db.scalar(select(Photograph))
         revision = db.get(LocationRevision, response.json()["revision_actual_id"])
         assert photo.registrado_por == revision.responsable_id
+        assert revision.metodo_coordenadas == "GPS_DISPOSITIVO" and revision.url_gps is None
         assert db.get(Location, response.json()["id"]).creado_por == revision.responsable_id
         assert len(db.scalars(select(Photograph)).all()) == 1
         assert db.scalar(select(PhotoOperation)).estado == "finalizada"
@@ -678,7 +680,7 @@ def test_field_registration_checks_permissions_and_invalid_photo_before_writes(a
 
     monkeypatch.setattr("app.main.Storage", FakeStorage)
     body = {"idempotencia": str(uuid4()), "kardex": "nuevo", "latitud": 1, "longitud": 2,
-            "fotografia_base64": "aW52YWxpZG8="}
+            "fotografia_base64": "aW52YWxpZG8=", "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True}
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 403
     with factory() as db:
         role = db.scalar(select(Role).where(Role.name == "TECNICO"))
@@ -689,6 +691,105 @@ def test_field_registration_checks_permissions_and_invalid_photo_before_writes(a
     assert client.get("/ubicaciones", headers=auth, params={"kardex": "nuevo"}).status_code == 200
     with factory() as db:
         assert db.scalar(select(Contract)) is None
+
+
+@pytest.mark.parametrize("short", [False, True])
+def test_shared_registration_requires_photo_and_preserves_provenance(api, monkeypatch, short):
+    client, factory = api
+    with factory() as db:
+        db.scalar(select(Role).where(Role.name == "GERENTE")).permissions = list(db.scalars(
+            select(Permission).where(Permission.name.in_(["ubicaciones.registrar", "ubicaciones.consultar"]))
+        ))
+        db.commit()
+    objects = {}
+
+    class FakeStorage:
+        def get(self, key):
+            return objects.get(key)
+
+        def put(self, key, content):
+            objects[key] = content
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    monkeypatch.setattr("app.enlaces_gps.redirect_location", lambda _: "https://www.google.com/maps?q=-16.5,-68.1")
+    auth = headers(client, "manager", "testpass2")
+    denied = headers(client, "tech", "testpass3")
+    url = "https://maps.app.goo.gl/abc" if short else "https://www.google.com/maps?q=-16.5,-68.1"
+    assert client.post("/registro-ubicacion/interpretar-enlace", headers=denied, json={"url_gps": url}).status_code == 403
+    preview = client.post("/registro-ubicacion/interpretar-enlace", headers=auth, json={"url_gps": url})
+    assert preview.status_code == 200 and preview.json() == {"latitud": "-16.5", "longitud": "-68.1"}
+    image = io.BytesIO()
+    Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
+    body = {
+        "idempotencia": str(uuid4()), "kardex": "COMPARTIDO",
+        "latitud": "-16.5", "longitud": "-68.1", "metodo_coordenadas": "ENLACE_COMPARTIDO",
+        "url_gps": url, "fotografia_base64": base64.b64encode(image.getvalue()).decode(), "coordenadas_confirmadas": True,
+    }
+    assert client.post("/registro-ubicacion", headers=denied, json=body).status_code == 403
+    assert client.post("/registro-ubicacion", headers=auth, json={k: v for k, v in body.items() if k != "metodo_coordenadas"}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={k: v for k, v in body.items() if k != "fotografia_base64"}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={k: v for k, v in body.items() if k != "coordenadas_confirmadas"}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "coordenadas_confirmadas": False}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "latitud": "91"}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "latitud": "0"}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "metodo_coordenadas": "GPS_DISPOSITIVO"}).status_code == 422
+    result = client.post("/registro-ubicacion", headers=auth, json=body)
+    assert result.status_code == 201
+    location = result.json()
+    assert location["metodo_coordenadas"] == "ENLACE_COMPARTIDO" and location["url_gps"] == url
+    assert client.get(f"/ubicaciones/{location['id']}/fotografia", headers=auth).status_code == 200
+    revision = client.get(f"/ubicaciones/{location['id']}/revisiones", headers=auth).json()[0]
+    assert revision["metodo_coordenadas"] == "ENLACE_COMPARTIDO" and revision["url_gps"] == url
+    monkeypatch.setattr("app.enlaces_gps.redirect_location", lambda _: pytest.fail("No debe resolverse un reintento"))
+    assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 201
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "url_gps": url + "x"}).status_code == 409
+    admin = headers(client)
+    reason = client.post("/motivos-actualizacion", headers=admin, json={"nombre": "Traslado"}).json()
+    assert client.put(f"/ubicaciones/{location['id']}/actualizacion", headers=admin, json={
+        "idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"], "latitud": 1, "longitud": 2,
+    }).status_code == 200
+    current = client.get(f"/ubicaciones/{location['id']}", headers=auth).json()
+    assert current["metodo_coordenadas"] is None and current["url_gps"] is None
+    assert client.get(f"/ubicaciones/{location['id']}/revisiones", headers=auth).json()[0]["url_gps"] == url
+
+
+def test_legacy_pending_draft_keeps_closed_revision_and_retries(api, monkeypatch):
+    client, factory = api
+    objects = {}
+
+    class FakeStorage:
+        failures = 2
+
+        def get(self, key):
+            return objects.get(key)
+
+        def put(self, key, content):
+            if FakeStorage.failures:
+                FakeStorage.failures -= 1
+                raise RuntimeError("Storage no disponible")
+            objects[key] = content
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    auth = headers(client)
+    image = io.BytesIO()
+    Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
+    body = {
+        "idempotencia": str(uuid4()), "kardex": "BORRADOR",
+        "latitud": 1, "longitud": 2, "metodo_coordenadas": "GPS_DISPOSITIVO",
+        "coordenadas_confirmadas": True, "fotografia_base64": base64.b64encode(image.getvalue()).decode(),
+    }
+    assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 503
+    with factory() as db:
+        original = db.scalar(select(LocationRevision))
+        original.metodo_coordenadas = None
+        db.commit()
+    assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 503
+    assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 201
+    with factory() as db:
+        revisions = db.scalars(select(LocationRevision).order_by(LocationRevision.id)).all()
+        assert [row.metodo_coordenadas for row in revisions] == [None, "GPS_DISPOSITIVO"]
+        assert db.scalar(select(Location)).revision_actual_id == revisions[-1].id
+        assert db.scalar(select(Photograph)) is not None
 
 
 def test_creator_metadata_requires_location_consult_permission(api):
@@ -735,7 +836,7 @@ def test_field_registration_recovers_when_object_already_uploaded(api, monkeypat
     monkeypatch.setattr("app.main.Storage", FakeStorage)
     auth = headers(client, "tech", "testpass3")
     body = {"idempotencia": str(uuid4()), "kardex": "carrera", "latitud": 1, "longitud": 2,
-            "fotografia_base64": encoded}
+            "fotografia_base64": encoded, "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True}
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == (201 if matching else 503)
     with factory() as db:
         assert db.scalar(select(PhotoOperation)).estado == ("finalizada" if matching else "preparada")

@@ -112,6 +112,16 @@ class Location(Base):
             "(latitud IS NOT NULL AND longitud IS NOT NULL AND latitud BETWEEN -90 AND 90 AND longitud BETWEEN -180 AND 180)",
             name="ubicaciones_coordenadas_validas",
         ),
+        CheckConstraint(
+            "metodo_coordenadas IS NULL OR metodo_coordenadas IN ('GPS_DISPOSITIVO', 'ENLACE_COMPARTIDO')",
+            name="ubicaciones_metodo_valido",
+        ),
+        CheckConstraint(
+            "metodo_coordenadas IS NULL OR (latitud IS NOT NULL AND longitud IS NOT NULL AND "
+            "((metodo_coordenadas = 'GPS_DISPOSITIVO' AND url_gps IS NULL) OR "
+            "(metodo_coordenadas = 'ENLACE_COMPARTIDO' AND url_gps IS NOT NULL AND length(trim(url_gps)) > 0)))",
+            name="ubicaciones_metodo_contenido",
+        ),
     )
 
     id: Mapped[int] = mapped_column(pk_type, Identity(), primary_key=True)
@@ -120,6 +130,7 @@ class Location(Base):
     latitud: Mapped[Decimal | None] = mapped_column(Numeric)
     longitud: Mapped[Decimal | None] = mapped_column(Numeric)
     url_gps: Mapped[str | None] = mapped_column(Text)
+    metodo_coordenadas: Mapped[str | None] = mapped_column(String(32))
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     creado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
@@ -140,12 +151,23 @@ class LocationRevision(Base):
             name="revisiones_coordenadas_validas",
         ),
         CheckConstraint("url_gps IS NULL OR length(trim(url_gps)) > 0", name="revisiones_url_no_vacia"),
+        CheckConstraint(
+            "metodo_coordenadas IS NULL OR metodo_coordenadas IN ('GPS_DISPOSITIVO', 'ENLACE_COMPARTIDO')",
+            name="revisiones_metodo_valido",
+        ),
+        CheckConstraint(
+            "metodo_coordenadas IS NULL OR (latitud IS NOT NULL AND longitud IS NOT NULL AND "
+            "((metodo_coordenadas = 'GPS_DISPOSITIVO' AND url_gps IS NULL) OR "
+            "(metodo_coordenadas = 'ENLACE_COMPARTIDO' AND url_gps IS NOT NULL AND length(trim(url_gps)) > 0)))",
+            name="revisiones_metodo_contenido",
+        ),
         Index("revisiones_por_ubicacion", "ubicacion_id", text("registrado_en DESC"), text("id DESC")),
     )
 
     id: Mapped[int] = mapped_column(pk_type, Identity(), primary_key=True)
     ubicacion_id: Mapped[int] = mapped_column(ForeignKey("ubicaciones.id", ondelete="RESTRICT"))
     url_gps: Mapped[str | None] = mapped_column(Text)
+    metodo_coordenadas: Mapped[str | None] = mapped_column(String(32))
     latitud: Mapped[Decimal | None] = mapped_column(Numeric)
     longitud: Mapped[Decimal | None] = mapped_column(Numeric)
     fecha_evento: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
