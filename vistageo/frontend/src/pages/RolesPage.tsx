@@ -2,19 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
-import { Input } from '../components/Input'
 import type { Role } from '../types/api'
 
 export function RolesPage() {
   const { user, hasPermission } = useAuth()
-  const canManage = hasPermission('roles.gestionar')
-  const isManager = ['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
+  const isManager = ['ADMINISTRADOR', 'GERENCIA', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
   const canConsult = isManager || hasPermission('roles.consultar')
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [newRole, setNewRole] = useState('')
   const [editingPerms, setEditingPerms] = useState<Role | null>(null)
   const [selectedPerms, setSelectedPerms] = useState<string[]>([])
 
@@ -38,29 +35,6 @@ export function RolesPage() {
   useEffect(() => {
     load()
   }, [load])
-
-  const createRole = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newRole.trim()) return
-    setError('')
-    try {
-      await apiRequest('/roles', { method: 'POST', body: { name: newRole } })
-      setNewRole('')
-      load()
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  const renameRole = async (role: Role, name: string) => {
-    setError('')
-    try {
-      await apiRequest(`/roles/${role.id}`, { method: 'PATCH', body: { name } })
-      load()
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
 
   const savePerms = async () => {
     if (!editingPerms) return
@@ -86,15 +60,6 @@ export function RolesPage() {
       <h1 className="text-2xl font-bold text-slate-900">Roles y permisos</h1>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {canManage && (
-        <form onSubmit={createRole} className="flex flex-wrap items-end gap-2 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
-          <div className="flex-1">
-            <Input label="Nuevo rol" value={newRole} onChange={(e) => setNewRole(e.target.value.toUpperCase())} />
-          </div>
-          <Button type="submit">Crear rol</Button>
-        </form>
-      )}
-
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
@@ -107,17 +72,6 @@ export function RolesPage() {
                   <p className="text-xs text-slate-500">{role.permissions.join(', ') || 'Sin permisos'}</p>
                 </div>
                 <div className="flex gap-2">
-                  {canManage && !['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(role.name) && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const name = prompt('Nuevo nombre', role.name)
-                        if (name) renameRole(role, name.toUpperCase())
-                      }}
-                    >
-                      Renombrar
-                    </Button>
-                  )}
                   {isManager && (user?.role_name === 'ADMINISTRADOR' || role.name !== 'ADMINISTRADOR') && (
                     <Button
                       variant="ghost"

@@ -19,7 +19,7 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null)
 
 function enableLocalJornada(user: SessionUser) {
-  if (!user.must_change_password && ['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'TECNICO', 'CAJERO', 'CALL CENTER'].includes(user.role_name)) {
+  if (!user.must_change_password && ['ADMINISTRADOR', 'GERENCIA', 'GERENTE', 'JEFE COMERCIAL', 'TECNICO', 'CAJERO', 'CALL CENTER'].includes(user.role_name)) {
     localStorage.setItem('vistageo_jornada_habilitada', 'true')
   }
 }

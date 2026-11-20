@@ -82,8 +82,8 @@ datos automáticamente.
   definitivamente, también si es histórica. Si falla la limpieza, se informa
   como pendiente; el borrador conserva la operación para reintentar desde el
   mismo dispositivo. El navegador no guarda las claves de Supabase.
-- Los administradores, gerente y jefes comercial y operativo pueden agregar,
-  editar, activar y desactivar motivos. El permiso GPS se asigna expresamente
+- Los administradores, gerencia y jefe operativo pueden agregar, editar,
+  activar y desactivar motivos. El permiso GPS se asigna expresamente
   desde Roles; no se concede automáticamente por tener permiso de fotografía.
 - Las fotos de jornada permanecen en IndexedDB de este navegador: no se envían
   al backend ni a Supabase. Tras iniciar sesión una vez con un rol habilitado y

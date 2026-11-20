@@ -11,7 +11,7 @@ export function UsersPage() {
   const { user, hasPermission } = useAuth()
   const canManage = hasPermission('usuarios.gestionar')
   const canListRoles = hasPermission('roles.consultar') ||
-    ['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
+    ['ADMINISTRADOR', 'GERENCIA', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
   const [users, setUsers] = useState<UserRead[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,8 +31,9 @@ export function UsersPage() {
         canListRoles ? apiRequest<Role[]>('/roles') : Promise.resolve([]),
       ])
       setUsers(u)
-      setRoles(r)
-      if (!form.role_id && r.length) setForm((f) => ({ ...f, role_id: r[0].id }))
+      const official = r.filter((role) => ['ADMINISTRADOR', 'GERENCIA', 'JEFE OPERATIVO', 'JEFE TECNICO', 'TECNICO'].includes(role.name))
+      setRoles(official)
+      if (!form.role_id && official.length) setForm((f) => ({ ...f, role_id: official[0].id }))
     } catch (err) {
       setError((err as Error).message)
     } finally {

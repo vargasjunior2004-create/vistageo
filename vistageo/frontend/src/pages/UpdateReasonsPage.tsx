@@ -7,7 +7,7 @@ import type { UpdateReason } from '../types/api'
 
 export function UpdateReasonsPage() {
   const { user } = useAuth()
-  const allowed = ['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
+  const allowed = ['ADMINISTRADOR', 'GERENCIA', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
   const [reasons, setReasons] = useState<UpdateReason[]>([])
   const [name, setName] = useState('')
   const [editing, setEditing] = useState<UpdateReason | null>(null)

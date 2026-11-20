@@ -867,6 +867,41 @@ def test_role_permissions_and_admin_escalation_boundaries(api):
         assert event.details["despues"] == ["usuarios.gestionar"]
 
 
+def test_catalogo_solo_permite_roles_oficiales(api):
+    client, factory = api
+    admin = headers(client)
+    assert client.post("/roles", headers=admin, json={"name": "CAJERO"}).status_code == 422
+    created = client.post("/roles", headers=admin, json={"name": "JEFE TECNICO"})
+    assert created.status_code == 201
+    assert client.patch(f"/roles/{created.json()['id']}", headers=admin, json={"name": "OTRO"}).status_code == 403
+    with factory() as db:
+        retired = Role(name="CAJERO")
+        db.add(retired)
+        db.commit()
+        retired_id = retired.id
+    assert client.post("/usuarios", headers=admin, json={
+        "username": "OTRO", "password": "NEWPASS9", "role_id": retired_id,
+    }).status_code == 409
+
+
+def test_roles_oficiales_asignables_y_gerencia_conserva_controles(api):
+    client, factory = api
+    admin = headers(client)
+    manager = headers(client, "manager", "testpass2")
+    with factory() as db:
+        db.scalar(select(Role).where(Role.name == "GERENTE")).name = "GERENCIA"
+        db.add_all([Role(name="JEFE OPERATIVO"), Role(name="JEFE TECNICO")])
+        db.commit()
+        roles = [(role.id, role.name) for role in db.scalars(select(Role)).all()]
+    assert client.get("/permisos", headers=manager).status_code == 200
+    for role_id, name in roles:
+        created = client.post("/usuarios", headers=admin, json={
+            "username": f"TEST_{role_id}", "password": "NEWPASS9", "role_id": role_id,
+        })
+        assert created.status_code == 201, name
+        assert created.json()["role_id"] == role_id
+
+
 def test_cannot_deactivate_last_administrator(api):
     client, factory = api
     admin = headers(client)

@@ -11,7 +11,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi.testclient import TestClient
 from PIL import Image
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 
@@ -19,10 +19,11 @@ from app.database import create_database_engine, get_db
 from app.fotografia import photo_version, replace_photo
 from app.inventario_historico import save_inventory
 from app.main import app, list_locations
+from app.limpiar_roles import apply, review
 from app.migrar_kardex import MigrationPlan, save_plan
 from app.migrar_ubicaciones import LocationPlan, save_plan as save_location_plan
 from app.migrar_fotografias import Photo, import_photo
-from app.models import User
+from app.models import AuditEvent, Role, User
 from app.registro_ubicacion import register_location
 from app.schemas import FieldLocationCreate, PhotographReplace
 from app.security import password_hash
@@ -75,6 +76,44 @@ def create_user(db, name):
 def create_location(db, kardex):
     db.execute(text("INSERT INTO contratos (kardex) VALUES (:k)"), {"k": kardex})
     return db.execute(text("INSERT INTO ubicaciones (kardex) VALUES (:k) RETURNING id"), {"k": kardex}).scalar_one()
+
+
+def test_limpieza_roles_en_postgresql_preserva_cuentas_y_permisos(db):
+    admin_id = create_user(db, "ADMINISTRADOR")
+    candidate_id = create_user(db, "CAJERO")
+    manager_id = db.execute(text("INSERT INTO roles (nombre) VALUES ('GERENTE') RETURNING id")).scalar_one()
+    db.execute(text("INSERT INTO permisos (nombre) VALUES ('roles.consultar')"))
+    db.execute(text("""
+        INSERT INTO rol_permisos (rol_id, permiso_id)
+        SELECT :role_id, id FROM permisos WHERE nombre = 'roles.consultar'
+    """), {"role_id": manager_id})
+    session = sessionmaker(bind=db, expire_on_commit=False)()
+    report = review(session)
+    assert report["problemas"] == []
+    assert [user["id"] for user in report["usuarios_candidatos"]] == [candidate_id]
+    apply(session, report, {candidate_id})
+    session.flush()
+    assert session.get(User, admin_id) is not None
+    assert session.get(User, candidate_id) is None
+    manager = session.get(Role, manager_id)
+    assert manager.name == "GERENCIA"
+    assert [permission.name for permission in manager.permissions] == ["roles.consultar"]
+    assert set(session.scalars(select(Role.name))) == {
+        "ADMINISTRADOR", "GERENCIA", "JEFE OPERATIVO", "JEFE TECNICO", "TECNICO",
+    }
+
+
+def test_limpieza_roles_en_postgresql_detecta_auditoria_inmutable(db):
+    create_user(db, "ADMINISTRADOR")
+    candidate_id = create_user(db, "CALL CENTER")
+    session = sessionmaker(bind=db, expire_on_commit=False)()
+    session.add(AuditEvent(action="PRUEBA", target_id=candidate_id))
+    session.flush()
+    report = review(session)
+    assert report["referencias_usuarios"]
+    with pytest.raises(ValueError, match="contiene problemas"):
+        apply(session, report, {candidate_id})
+    assert session.get(User, candidate_id) is not None
 
 
 def test_permisos_panel_migracion_con_roles_existentes(db):

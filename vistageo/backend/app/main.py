@@ -21,7 +21,7 @@ from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, Histo
 from app.actualizacion_ubicacion import update_location
 from app.fotografia import photo_version, recovery_loop, replace_photo
 from app.registro_ubicacion import register_location
-from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, PERMISSIONS, PERMISSION_MANAGERS, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, token_hash, verify_password
+from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, OFFICIAL_ROLES, PERMISSIONS, PERMISSION_MANAGERS, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, token_hash, verify_password
 from app.storage import BUCKET, Storage
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False, interpolate=False)
@@ -191,6 +191,8 @@ def create_user(data: UserCreate, actor: User = Depends(current_user), db: Sessi
     require_permission(actor, "usuarios.gestionar")
     role = get_role(db, data.role_id)
     protect_privileged_roles(actor, role)
+    if role.name not in OFFICIAL_ROLES:
+        raise HTTPException(status_code=409, detail="El rol no pertenece al catálogo oficial")
     user = User(username=data.username, password_hash=password_hash(data.password.get_secret_value()), role_id=role.id, must_change_password=True)
     db.add(user)
     try:
@@ -215,6 +217,8 @@ def edit_user(user_id: int, data: UserUpdate, actor: User = Depends(current_user
     user = get_user(db, user_id)
     role = get_role(db, data.role_id) if data.role_id is not None else user.role
     protect_privileged_roles(actor, user.role, role)
+    if data.role_id is not None and role.name not in OFFICIAL_ROLES:
+        raise HTTPException(status_code=409, detail="El rol no pertenece al catálogo oficial")
     active = data.active if data.active is not None else user.active
     protect_last_admin(db, user, role, active)
     before = {"username": user.username, "role_id": user.role_id, "active": user.active}
@@ -264,6 +268,8 @@ def list_roles(actor: User = Depends(current_user), db: Session = Depends(get_db
 @app.post("/roles", status_code=201)
 def create_role(data: RoleCreate, actor: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     require_permission(actor, "roles.gestionar")
+    if data.name not in OFFICIAL_ROLES:
+        raise HTTPException(status_code=422, detail="Solo se permiten roles oficiales")
     if data.name in PERMISSION_MANAGERS:
         require_admin(actor)
     role = Role(name=data.name)
@@ -281,14 +287,8 @@ def create_role(data: RoleCreate, actor: User = Depends(current_user), db: Sessi
 @app.patch("/roles/{role_id}")
 def rename_role(role_id: int, data: RoleCreate, actor: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
     require_permission(actor, "roles.gestionar")
-    role = get_role(db, role_id)
-    if role.name in PERMISSION_MANAGERS or data.name in PERMISSION_MANAGERS:
-        raise HTTPException(status_code=403, detail="No se pueden renombrar roles protegidos")
-    old_name = role.name
-    role.name = data.name
-    audit(db, "RENOMBRAR_ROL", actor.id, role_id=role.id, details={"antes": old_name, "despues": data.name})
-    commit(db)
-    return read_role(role)
+    get_role(db, role_id)
+    raise HTTPException(status_code=403, detail="El catálogo de roles oficiales no se puede renombrar")
 
 
 @app.get("/permisos")

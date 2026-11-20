@@ -525,30 +525,56 @@ límite; si persisten, el comando informa el fallo y puede reanudarse después.
 El importador no reemplaza fotos existentes; el flujo de reemplazo del panel
 es independiente del importador.
 
-No se eliminan roles desde la API; esto conserva sus referencias de auditoría.
+## Catálogo oficial y limpieza controlada
 
-El catálogo comprende `usuarios.consultar`, `usuarios.gestionar`,
-`roles.consultar`, `roles.gestionar`, `ubicaciones.consultar` y
-`ubicaciones.registrar`, además de `ubicaciones.fotografia.editar`. El
-administrador tiene todos ellos. La revisión
-`0005` asigna los dos permisos de ubicaciones a los roles existentes
-`GERENTE`, `JEFE COMERCIAL`, `TECNICO`, `CAJERO` y `CALL CENTER`, y los dos
-de usuarios a `GERENTE` y `JEFE COMERCIAL`; conserva las demás asignaciones.
-Los permisos pueden configurarse posteriormente.
-`ADMINISTRADOR`, `GERENTE`, `JEFE COMERCIAL` y `JEFE OPERATIVO` pueden
-modificar permisos de roles. Solo `ADMINISTRADOR` puede asignar el rol
-administrador, cambiar su configuración o modificar una cuenta
-administradora. No se puede desactivar ni quitar el rol del último
-administrador activo. Los nombres `JEFE COMERCIAL` y `JEFE OPERATIVO` son
-los nombres definitivos confirmados para los roles antes llamados «jefa
-comercial» y «jefa operativa»; no se crean roles duplicados.
+Los roles oficiales son `ADMINISTRADOR`, `GERENCIA`, `JEFE OPERATIVO`,
+`JEFE TECNICO` y `TECNICO`. La API permite crear únicamente estos nombres y
+no permite renombrarlos. La inicialización de una base vacía crea los cinco.
+Durante la transición, `GERENTE` conserva sus controles previos hasta que se
+renombre a `GERENCIA`.
+
+En una instalación existente, la limpieza es un procedimiento separado, no
+una migración Alembic automática. Antes de ejecutarlo, verificar la base de
+destino, su revisión Alembic, una copia de seguridad y su restauración; detener
+la aplicación durante la revisión y aplicación. Desde `backend`:
+
+```sh
+.venv/bin/python -m app.limpiar_roles
+```
+
+El informe identifica los roles, los usuarios candidatos de `CAJERO`,
+`CALL CENTER` y `JEFE COMERCIAL`, y sus referencias. Revisar y confirmar que
+cada usuario candidato sea realmente de prueba. Si hay un rol no previsto,
+un conflicto entre `GERENTE` y `GERENCIA`, ausencia de administrador activo o
+alguna referencia de un usuario o rol retirado, el procedimiento se detiene:
+no borra sesiones, auditorías, ubicaciones ni otros registros.
+
+Solo después de revisar el informe, repetir con `--aplicar` y un `--usuario-id`
+por cada candidato aprobado. Si no hay candidatos, usar únicamente
+`--aplicar`. La lista debe coincidir exactamente con los candidatos del informe
+actualizado. La aplicación es transaccional: elimina solo los candidatos y
+roles indicados, renombra `GERENTE` conservando su ID y permisos, crea roles
+oficiales ausentes y registra el resultado en auditoría. No toca contraseñas,
+fotografías, ubicaciones ni historiales. Si falla cualquier operación, se
+revierte la transacción completa. No se eliminan roles desde la API.
+
+El procedimiento conserva los permisos de los roles existentes; los roles
+creados en una base existente empiezan sin permisos. Por tanto, no garantiza
+que todos los usuarios puedan consultar ubicaciones: esto depende de
+`ubicaciones.consultar`, que debe revisarse por separado. Tampoco limita el
+alcance de ubicaciones por usuario. El catálogo incluye `usuarios.consultar`,
+`usuarios.gestionar`, `roles.consultar`, `roles.gestionar`,
+`ubicaciones.consultar`, `ubicaciones.registrar`,
+`ubicaciones.fotografia.editar` y `ubicaciones.gps.editar`. El administrador
+tiene acceso completo. Los controles existentes siguen permitiendo a
+`GERENCIA` y `JEFE OPERATIVO` modificar permisos; no se han redistribuido.
 
 `usuarios.gestionar` permite crear usuarios, asignar roles no administradores,
 editar y restablecer contraseñas. Otorgarlo incluye esas facultades y debe
-hacerse cuidadosamente. Solo los cuatro gestores de permisos pueden asignar
-roles de gestor o modificar/restablecer cuentas con esos roles; solo el
-administrador puede hacerlo para cuentas administradoras. Esto evita que una
-persona con gestión delegada se apropie de una cuenta gestora. El
+hacerse cuidadosamente. Solo los gestores de permisos pueden asignar roles de
+gestor o modificar/restablecer cuentas con esos roles; solo el administrador
+puede hacerlo para cuentas administradoras. No se puede desactivar ni quitar
+el rol del último administrador activo. El
 restablecimiento de identidad y la entrega de
 la contraseña temporal se realizan por un canal seguro externo a la API; el
 administrador debe verificar primero la identidad.

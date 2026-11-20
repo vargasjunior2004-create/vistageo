@@ -6,11 +6,9 @@ from sqlalchemy import func, select, text
 from app.database import session_factory
 from app.models import AuditEvent, Permission, Role, User
 from app.schemas import validate_password
-from app.security import ADMIN, PERMISSION_MANAGERS, PERMISSIONS, password_hash
+from app.security import ADMIN, OFFICIAL_ROLES, PERMISSIONS, password_hash
 
-INITIAL_ROLES = PERMISSION_MANAGERS | {
-    "JEFE TECNICO", "TECNICO", "CAJERO", "CALL CENTER",
-}
+INITIAL_ROLES = OFFICIAL_ROLES
 
 
 def main() -> None:
@@ -35,11 +33,11 @@ def main() -> None:
         db.flush()
         for role in db.scalars(select(Role)).all():
             names = set()
-            if role.name in {"GERENTE", "JEFE COMERCIAL", "TECNICO", "CAJERO", "CALL CENTER"}:
+            if role.name in {"GERENCIA", "TECNICO"}:
                 names.update({"ubicaciones.consultar", "ubicaciones.registrar"})
-            if role.name in {"GERENTE", "JEFE COMERCIAL", "JEFE OPERATIVO", "JEFE TECNICO", "TECNICO", "CAJERO", "CALL CENTER"}:
+            if role.name in {"GERENCIA", "JEFE OPERATIVO", "JEFE TECNICO", "TECNICO"}:
                 names.update({"ubicaciones.consultar", "ubicaciones.fotografia.editar"})
-            if role.name in {"GERENTE", "JEFE COMERCIAL"}:
+            if role.name == "GERENCIA":
                 names.update({"usuarios.consultar", "usuarios.gestionar"})
             if names:
                 role.permissions = list(db.scalars(select(Permission).where(Permission.name.in_(names))).all())

@@ -15,8 +15,8 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
   const closeButton = useRef<HTMLButtonElement>(null)
   const sidebar = useRef<HTMLElement>(null)
 
-  const permissionManager = ['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
-  const fieldRole = ['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'TECNICO', 'CAJERO', 'CALL CENTER'].includes(user?.role_name ?? '')
+  const permissionManager = ['ADMINISTRADOR', 'GERENCIA', 'GERENTE', 'JEFE COMERCIAL', 'JEFE OPERATIVO'].includes(user?.role_name ?? '')
+  const fieldRole = ['ADMINISTRADOR', 'GERENCIA', 'GERENTE', 'JEFE COMERCIAL', 'TECNICO', 'CAJERO', 'CALL CENTER'].includes(user?.role_name ?? '')
   const work: NavItem[] = [
     { to: '/', label: 'Inicio', icon: 'home', enabled: true },
     { to: '/registrar-ubicacion', label: 'Registrar ubicación', icon: 'register', enabled: hasPermission('ubicaciones.registrar') },

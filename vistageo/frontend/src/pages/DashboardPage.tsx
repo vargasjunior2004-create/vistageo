@@ -6,7 +6,7 @@ type Action = { to: string; title: string; description: string; icon: IconName; 
 
 export function DashboardPage() {
   const { user, hasPermission } = useAuth()
-  const fieldRole = ['ADMINISTRADOR', 'GERENTE', 'JEFE COMERCIAL', 'TECNICO', 'CAJERO', 'CALL CENTER'].includes(user?.role_name ?? '')
+  const fieldRole = ['ADMINISTRADOR', 'GERENCIA', 'GERENTE', 'JEFE COMERCIAL', 'TECNICO', 'CAJERO', 'CALL CENTER'].includes(user?.role_name ?? '')
   const groups: { title: string; description: string; actions: Action[] }[] = [
     {
       title: 'Ubicaciones',

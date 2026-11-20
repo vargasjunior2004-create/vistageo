@@ -13,7 +13,8 @@ from app.database import get_db
 from app.models import AuditEvent, AuthSession, User, as_utc, now_utc
 
 ADMIN = "ADMINISTRADOR"
-PERMISSION_MANAGERS = {ADMIN, "GERENTE", "JEFE COMERCIAL", "JEFE OPERATIVO"}
+OFFICIAL_ROLES = {ADMIN, "GERENCIA", "JEFE OPERATIVO", "JEFE TECNICO", "TECNICO"}
+PERMISSION_MANAGERS = {ADMIN, "GERENCIA", "GERENTE", "JEFE COMERCIAL", "JEFE OPERATIVO"}
 PERMISSIONS = {
     "usuarios.consultar", "usuarios.gestionar", "roles.consultar", "roles.gestionar",
     "ubicaciones.consultar", "ubicaciones.registrar", "ubicaciones.fotografia.editar", "ubicaciones.gps.editar",
