@@ -63,6 +63,201 @@ def headers(client, username="admin", password="testpass1"):
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+def test_catalogo_motivos_permisos_y_desactivacion(api):
+    client, factory = api
+    admin = headers(client)
+    manager = headers(client, "manager", "testpass2")
+    tech = headers(client, "tech", "testpass3")
+    assert client.post("/motivos-actualizacion", headers=tech, json={"nombre": "Traslado"}).status_code == 403
+    assert client.get("/motivos-actualizacion?todos=true", headers=tech).status_code == 403
+    assert client.get("/motivos-actualizacion", headers=tech).status_code == 403
+    with factory() as db:
+        db.scalar(select(Role).where(Role.name == "TECNICO")).permissions = [
+            db.scalar(select(Permission).where(Permission.name == "ubicaciones.consultar"))
+        ]
+        db.commit()
+    assert client.post("/motivos-actualizacion", headers=manager, json={"nombre": "   "}).status_code == 422
+    created = client.post("/motivos-actualizacion", headers=manager, json={"nombre": " Traslado "})
+    assert created.status_code == 201
+    reason = created.json()
+    assert reason["nombre"] == "Traslado" and reason["activo"] is True
+    path = f"/motivos-actualizacion/{reason['id']}"
+    assert client.put(path, headers=tech, json={"nombre": "Obra", "activo": False}).status_code == 403
+    assert client.put(path, headers=admin, json={"nombre": "Obra", "activo": False}).status_code == 200
+    assert client.get("/motivos-actualizacion", headers=tech).json() == []
+    assert client.get("/motivos-actualizacion?todos=true", headers=manager).json() == [
+        {"id": reason["id"], "nombre": "Obra", "activo": False}
+    ]
+    assert client.put(path, headers=manager, json={"nombre": "Obra", "activo": True}).status_code == 200
+    assert client.get("/motivos-actualizacion", headers=tech).json()[0]["id"] == reason["id"]
+    assert client.delete(path, headers=admin).status_code == 405
+
+
+def test_actualizacion_con_motivo_permisos_reintento_y_auditoria(api, monkeypatch):
+    client, factory = api
+    objects = {"anterior.webp": b"original"}
+
+    class FakeStorage:
+        def get(self, key):
+            return objects.get(key)
+        def put(self, key, content):
+            objects[key] = content
+        def delete(self, key):
+            objects.pop(key, None)
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    admin = headers(client)
+    tech = headers(client, "tech", "testpass3")
+    reason = client.post("/motivos-actualizacion", headers=admin, json={"nombre": "Traslado"}).json()
+    with factory() as db:
+        user = db.scalar(select(User).where(User.username == "ADMIN"))
+        db.add(Contract(kardex="ACT-1"))
+        db.flush()
+        location = Location(kardex="ACT-1", latitud=1, longitud=2, url_gps="https://maps.google.com/old")
+        db.add(location)
+        db.flush()
+        db.add(Photograph(ubicacion_id=location.id, storage_bucket="fachada", storage_clave="anterior.webp",
+                          registrado_por=user.id))
+        db.commit()
+        location_id = location.id
+        role = db.scalar(select(Role).where(Role.name == "TECNICO"))
+        role.permissions = list(db.scalars(select(Permission).where(Permission.name.in_(
+            ["ubicaciones.consultar", "ubicaciones.gps.editar"]
+        ))).all())
+        db.commit()
+    path = f"/ubicaciones/{location_id}/actualizacion"
+    body = {"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
+            "latitud": "-16", "longitud": "-68", "observacion": "Nueva calle"}
+    assert client.put(path, headers=tech, json={**body, "motivo_id": 999}).status_code == 409
+    assert client.put(path, headers=tech, json=body).json() == {"estado": "finalizada"}
+    assert client.put(path, headers=tech, json=body).json() == {"estado": "finalizada"}
+    assert client.put(path, headers=tech, json={**body, "observacion": "otra"}).status_code == 409
+    assert client.put(path, headers=tech, json={**body, "idempotencia": str(uuid4())}).status_code == 412
+    result = client.get(f"/ubicaciones/{location_id}", headers=tech).json()
+    assert result["latitud"] == "-16.0000000000" and result["url_gps"] is None and result["version"] == 1
+    image = io.BytesIO()
+    Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
+    photo_version = client.get(f"/ubicaciones/{location_id}/fotografia", headers=tech).headers["x-foto-version"]
+    both = {"idempotencia": str(uuid4()), "version": 1, "motivo_id": reason["id"],
+            "latitud": "3", "longitud": "4", "foto_version": photo_version,
+            "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+    assert client.put(path, headers=tech, json=both).status_code == 403
+    assert client.put(path, headers=admin, json=both).json() == {"estado": "finalizada"}
+    assert client.put(path, headers=admin, json=both).json() == {"estado": "finalizada"}
+    assert "anterior.webp" not in objects
+    assert client.put(f"/motivos-actualizacion/{reason['id']}", headers=admin,
+                      json={"nombre": "Renombrado", "activo": False}).status_code == 200
+    history = client.get(f"/ubicaciones/{location_id}/actualizaciones", headers=tech).json()
+    assert len(history) == 2 and all(row["motivo"] == "Traslado" for row in history)
+    assert any(row["fachada"] and row["gps"] for row in history)
+    assert client.put(path, headers=tech, json={**body, "idempotencia": str(uuid4()), "version": 2}).status_code == 409
+    with factory() as db:
+        loc = db.get(Location, location_id)
+        assert loc.latitud == 3 and loc.longitud == 4 and loc.revision_actual_id is None
+
+
+def test_fallo_auditoria_no_publica_foto_ni_gps_y_permite_reintentar(api, monkeypatch):
+    client, factory = api
+    objects = {"anterior.webp": b"original"}
+
+    class FakeStorage:
+        def get(self, key):
+            return objects.get(key)
+        def put(self, key, content):
+            objects[key] = content
+        def delete(self, key):
+            objects.pop(key, None)
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    auth = headers(client)
+    reason = client.post("/motivos-actualizacion", headers=auth, json={"nombre": "Corrección"}).json()
+    with factory() as db:
+        actor = db.scalar(select(User).where(User.username == "ADMIN"))
+        db.add(Contract(kardex="rollback"))
+        db.flush()
+        loc = Location(kardex="rollback", latitud=1, longitud=2)
+        db.add(loc)
+        db.flush()
+        db.add(Photograph(ubicacion_id=loc.id, storage_bucket="fachada", storage_clave="anterior.webp",
+                          registrado_por=actor.id))
+        db.commit()
+        location_id = loc.id
+    image = io.BytesIO()
+    Image.new("RGB", (10, 10), "green").save(image, format="JPEG")
+    photo_path = f"/ubicaciones/{location_id}/fotografia"
+    body = {"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
+            "latitud": 3, "longitud": 4,
+            "foto_version": client.get(photo_path, headers=auth).headers["x-foto-version"],
+            "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+
+    def reject_audit(_mapper, _connection, target):
+        if target.accion == "ACTUALIZAR_DATOS_UBICACION":
+            raise RuntimeError("fallo de auditoría simulado")
+
+    event.listen(AuditRecord, "before_insert", reject_audit)
+    try:
+        with pytest.raises(RuntimeError, match="fallo de auditoría"):
+            client.put(f"/ubicaciones/{location_id}/actualizacion", headers=auth, json=body)
+    finally:
+        event.remove(AuditRecord, "before_insert", reject_audit)
+    with factory() as db:
+        location = db.get(Location, location_id)
+        assert location.latitud == 1 and location.longitud == 2 and location.version == 0
+        assert db.scalar(select(Photograph)).storage_clave == "anterior.webp"
+        assert db.scalar(select(PhotoOperation)).estado == "preparada"
+        assert db.scalar(select(AuditRecord).where(AuditRecord.accion == "ACTUALIZAR_DATOS_UBICACION")) is None
+    assert client.put(f"/ubicaciones/{location_id}/actualizacion", headers=auth, json=body).json() == {"estado": "finalizada"}
+    assert "anterior.webp" not in objects
+
+
+def test_borrador_antiguo_incompleto_se_completa_con_motivo(api, monkeypatch):
+    from app.fotografia import replace_photo
+    from app.schemas import PhotographReplace
+
+    client, factory = api
+    objects = {"anterior.webp": b"original"}
+
+    class FakeStorage:
+        fail = True
+        def get(self, key):
+            return objects.get(key)
+        def put(self, key, content):
+            if self.fail:
+                raise RuntimeError("interrupción")
+            objects[key] = content
+        def delete(self, key):
+            objects.pop(key, None)
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    auth = headers(client)
+    reason = client.post("/motivos-actualizacion", headers=auth, json={"nombre": "Corrección"}).json()
+    with factory() as db:
+        actor = db.scalar(select(User).where(User.username == "ADMIN"))
+        db.add(Contract(kardex="legacy"))
+        db.flush()
+        loc = Location(kardex="legacy")
+        db.add(loc)
+        db.flush()
+        db.add(Photograph(ubicacion_id=loc.id, storage_bucket="fachada", storage_clave="anterior.webp", registrado_por=actor.id))
+        db.commit()
+        location_id = loc.id
+        image = io.BytesIO()
+        Image.new("RGB", (10, 10), "green").save(image, format="JPEG")
+        legacy = {"idempotencia": str(uuid4()),
+                  "version": client.get(f"/ubicaciones/{location_id}/fotografia", headers=auth).headers["x-foto-version"],
+                  "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as interrupted:
+            replace_photo(location_id, PhotographReplace(**legacy), actor, db, FakeStorage())
+        assert interrupted.value.status_code == 503
+    FakeStorage.fail = False
+    assert client.put(f"/ubicaciones/{location_id}/fotografia", headers=auth, json=legacy).status_code == 409
+    body = {"idempotencia": legacy["idempotencia"], "version": 0, "motivo_id": reason["id"],
+            "foto_version": legacy["version"], "fotografia_base64": legacy["fotografia_base64"]}
+    assert client.put(f"/ubicaciones/{location_id}/actualizacion", headers=auth, json=body).json() == {"estado": "finalizada"}
+    assert len(client.get(f"/ubicaciones/{location_id}/actualizaciones", headers=auth).json()) == 1
+
+
 def test_unified_serves_frontend_and_preserves_api_routes(api, tmp_path):
     _, _factory = api
     (tmp_path / "index.html").write_text("<html>frontend</html>")
@@ -244,9 +439,11 @@ def test_reemplazo_fotografia_exige_permisos_y_preserva_ubicacion(api, monkeypat
     image = io.BytesIO()
     Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
     auth = headers(client, "tech", "testpass3")
-    body = {"idempotencia": str(uuid4()), "version": "0" * 64,
+    reason = client.post("/motivos-actualizacion", headers=headers(client), json={"nombre": "Corrección"}).json()
+    body = {"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"], "foto_version": "0" * 64,
             "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
-    path = f"/ubicaciones/{location_id}/fotografia"
+    path = f"/ubicaciones/{location_id}/actualizacion"
+    photo_path = f"/ubicaciones/{location_id}/fotografia"
     assert client.put(path, headers=auth, json=body).status_code == 403
     with factory() as db:
         db.scalar(select(Role).where(Role.name == "TECNICO")).permissions = [
@@ -259,16 +456,18 @@ def test_reemplazo_fotografia_exige_permisos_y_preserva_ubicacion(api, monkeypat
             Permission.name.in_(["ubicaciones.fotografia.editar", "ubicaciones.consultar"])
         )).all())
         db.commit()
-    response = client.get(path, headers=auth)
-    body["version"] = response.headers["x-foto-version"]
+    response = client.get(photo_path, headers=auth)
+    body["foto_version"] = response.headers["x-foto-version"]
     assert client.put(path, headers=auth, json={**body, "latitud": 0}).status_code == 422
-    assert client.put(f"/ubicaciones/{empty_id}/fotografia", headers=auth, json=body).status_code == 404
+    assert client.put(f"/ubicaciones/{empty_id}/actualizacion", headers=auth, json=body).status_code == 404
+    assert client.put(photo_path, headers=auth, json={"idempotencia": body["idempotencia"],
+                      "version": body["foto_version"], "fotografia_base64": body["fotografia_base64"]}).status_code == 409
     assert client.put(path, headers=auth, json=body).json() == {"estado": "finalizada"}
     assert "anterior.webp" not in objects
     assert client.put(path, headers=auth, json=body).json() == {"estado": "finalizada"}
     assert client.put(path, headers=auth, json={**body, "idempotencia": str(uuid4())}).status_code == 412
-    updated = client.get(path, headers=auth)
-    assert updated.status_code == 200 and updated.headers["x-foto-version"] != body["version"]
+    updated = client.get(photo_path, headers=auth)
+    assert updated.status_code == 200 and updated.headers["x-foto-version"] != body["foto_version"]
     with factory() as db:
         photo = db.scalar(select(Photograph).where(Photograph.ubicacion_id == location_id))
         location = db.get(Location, location_id)
@@ -316,11 +515,13 @@ def test_reemplazo_reintenta_limpieza_sin_borrar_foto_vigente(api, monkeypatch):
         db.commit()
         location_id = location.id
     auth = headers(client)
-    path = f"/ubicaciones/{location_id}/fotografia"
-    version = client.get(path, headers=auth).headers["x-foto-version"]
+    photo_path = f"/ubicaciones/{location_id}/fotografia"
+    path = f"/ubicaciones/{location_id}/actualizacion"
+    version = client.get(photo_path, headers=auth).headers["x-foto-version"]
+    reason = client.post("/motivos-actualizacion", headers=auth, json={"nombre": "Corrección"}).json()
     image = io.BytesIO()
     Image.new("RGB", (10, 10), "red").save(image, format="JPEG")
-    body = {"idempotencia": str(uuid4()), "version": version,
+    body = {"idempotencia": str(uuid4()), "version": 0, "foto_version": version, "motivo_id": reason["id"],
             "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
     assert client.put(path, headers=auth, json=body).json() == {"estado": "pendiente_limpieza"}
     with factory() as db:
@@ -373,11 +574,13 @@ def test_reemplazo_con_fallo_de_carga_conserva_foto_anterior(api, monkeypatch):
         db.commit()
         location_id = location.id
     auth = headers(client)
-    path = f"/ubicaciones/{location_id}/fotografia"
-    version = client.get(path, headers=auth).headers["x-foto-version"]
+    photo_path = f"/ubicaciones/{location_id}/fotografia"
+    path = f"/ubicaciones/{location_id}/actualizacion"
+    version = client.get(photo_path, headers=auth).headers["x-foto-version"]
+    reason = client.post("/motivos-actualizacion", headers=auth, json={"nombre": "Corrección"}).json()
     image = io.BytesIO()
     Image.new("RGB", (10, 10), "blue").save(image, format="JPEG")
-    body = {"idempotencia": str(uuid4()), "version": version,
+    body = {"idempotencia": str(uuid4()), "version": 0, "foto_version": version, "motivo_id": reason["id"],
             "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
     assert client.put(path, headers=auth, json=body).status_code == 503
     assert objects == {"anterior.webp": b"original"}
@@ -458,8 +661,10 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     assert client.get(f"/ubicaciones/{response.json()['id']}/fotografia", headers=auth).status_code == 200
     assert client.get("/usuarios", headers=auth).status_code == 403
     admin = headers(client)
-    assert client.post(f"/ubicaciones/{response.json()['id']}/revisiones", headers=admin,
-                       json={"latitud": 1, "longitud": 2}).status_code == 201
+    reason = client.post("/motivos-actualizacion", headers=admin, json={"nombre": "Cambio"}).json()
+    assert client.put(f"/ubicaciones/{response.json()['id']}/actualizacion", headers=admin,
+                      json={"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
+                            "latitud": 1, "longitud": 2}).status_code == 200
     updated = client.get(f"/ubicaciones/{response.json()['id']}", headers=auth).json()
     assert updated["creado_por_nombre"] == "TECH" and updated["creado_en"] == result["creado_en"]
 
@@ -783,17 +988,25 @@ def test_ubicaciones_guardan_historial_y_auditoria(api):
     assert client.post(url, headers=admin, json={"latitud": 91, "longitud": 0}).status_code == 422
     assert client.post(url, headers=admin, json={"url_gps": "no-es-una-url"}).status_code == 422
     assert client.post(url, headers=admin, json={}).status_code == 422
-    first = client.post(url, headers=admin, json={"url_gps": "https://maps.example/one"})
-    second = client.post(url, headers=admin, json={"latitud": -16.5, "longitud": -68.1})
-    assert first.status_code == second.status_code == 201
-    assert first.json()["cerrada"] and second.json()["cerrada"]
-    assert client.get(f"/ubicaciones/{location_id}", headers=admin).json()["revision_actual_id"] == second.json()["id"]
-    assert [r["id"] for r in client.get(url, headers=admin).json()] == [second.json()["id"], first.json()["id"]]
+    with factory() as db:
+        first = LocationRevision(ubicacion_id=location_id, url_gps="https://maps.example/one", cerrada=True)
+        db.add(first)
+        db.flush()
+        db.get(Location, location_id).revision_actual_id = first.id
+        db.get(Location, location_id).url_gps = first.url_gps
+        db.commit()
+        first_id = first.id
+    assert client.post(url, headers=admin, json={"latitud": -16.5, "longitud": -68.1}).status_code == 410
+    reason = client.post("/motivos-actualizacion", headers=admin, json={"nombre": "Cambio"}).json()
+    assert client.put(f"/ubicaciones/{location_id}/actualizacion", headers=admin, json={
+        "idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"], "latitud": -16.5, "longitud": -68.1,
+    }).status_code == 200
+    assert client.get(f"/ubicaciones/{location_id}", headers=admin).json()["revision_actual_id"] == first_id
+    assert [r["id"] for r in client.get(url, headers=admin).json()] == [first_id]
     assert client.get(url, headers=technician).status_code == 403
     with factory() as db:
         events = db.scalars(select(AuditRecord).where(AuditRecord.ubicacion_id == location_id).order_by(AuditRecord.id)).all()
-        assert [event.accion for event in events] == ["CREAR_UBICACION", "ACTUALIZAR_UBICACION", "ACTUALIZAR_UBICACION"]
-        assert events[-1].detalles["revision_anterior_id"] == first.json()["id"]
+        assert [event.accion for event in events] == ["CREAR_UBICACION", "ACTUALIZAR_DATOS_UBICACION"]
 
 
 def test_consulta_de_procedencia_requiere_administrador_y_filtra_ruta_exacta(api):

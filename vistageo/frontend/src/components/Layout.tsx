@@ -28,6 +28,7 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
     { to: '/usuarios', label: 'Usuarios', icon: 'users', enabled: user?.role_name !== 'TECNICO' && hasPermission('usuarios.consultar') },
     { to: '/roles', label: 'Roles', icon: 'roles', enabled: user?.role_name !== 'TECNICO' && (hasPermission('roles.consultar') || permissionManager) },
     { to: '/ubicaciones', label: 'Ubicaciones', icon: 'locations', enabled: user?.role_name === 'ADMINISTRADOR' },
+    { to: '/motivos-actualizacion', label: 'Motivos de actualización', icon: 'roles', enabled: permissionManager },
   ]
   const groups = [
     { label: 'Trabajo de campo', items: work.filter((item) => item.enabled) },

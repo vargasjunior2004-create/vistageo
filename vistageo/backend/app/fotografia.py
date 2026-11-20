@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+from collections.abc import Callable
 
 from fastapi import HTTPException
 from sqlalchemy import select, text
@@ -61,7 +62,11 @@ def cleanup_operation(db: Session, operation_id: int, storage: Storage) -> str:
     return operation.estado
 
 
-def replace_photo(location_id: int, data: PhotographReplace, actor: User, db: Session, storage: Storage) -> str:
+def replace_photo(
+    location_id: int, data: PhotographReplace, actor: User, db: Session, storage: Storage,
+    *, request_hash: str | None = None, validate: Callable[[Location], None] | None = None,
+    publish: Callable[[Location], None] | None = None,
+) -> str:
     content = optimize_photo(data.fotografia_base64)
     digest = hashlib.sha256(content).hexdigest()
     new_key = f"reemplazos/v1/{data.idempotencia}/{digest}.webp"
@@ -85,6 +90,8 @@ def replace_photo(location_id: int, data: PhotographReplace, actor: User, db: Se
                 raise HTTPException(status_code=404, detail="Ubicación no encontrada")
     photo = db.scalar(select(Photograph).where(Photograph.ubicacion_id == location_id).with_for_update())
     if operation is None:
+        if validate is not None:
+            validate(location)
         if photo is None:
             raise HTTPException(status_code=404, detail="La ubicación no tiene fotografía para reemplazar")
         if photo.storage_bucket != BUCKET:
@@ -94,6 +101,7 @@ def replace_photo(location_id: int, data: PhotographReplace, actor: User, db: Se
         operation = PhotoOperation(
             idempotencia=data.idempotencia, ubicacion_id=location_id, usuario_id=actor.id,
             fotografia_id=photo.id, tipo="REEMPLAZAR", estado="preparada",
+            solicitud_sha256=request_hash,
             nuevo_bucket=BUCKET, nueva_clave=new_key,
             anterior_bucket=photo.storage_bucket, anterior_clave=photo.storage_clave,
         )
@@ -114,6 +122,12 @@ def replace_photo(location_id: int, data: PhotographReplace, actor: User, db: Se
             or operation.fotografia_id is None or operation.anterior_bucket is None or operation.anterior_clave is None
             or photo_version(operation.fotografia_id, operation.anterior_bucket, operation.anterior_clave) != data.version):
         raise HTTPException(status_code=409, detail="La operación no coincide con el reemplazo original")
+    if operation.solicitud_sha256 is None and request_hash is not None and operation.estado in ("preparada", "objeto_listo"):
+        if validate is not None:
+            validate(location)
+        operation.solicitud_sha256 = request_hash
+    elif operation.solicitud_sha256 != request_hash:
+        raise HTTPException(status_code=409, detail="La operación no coincide con la solicitud original")
     if operation.estado == "pendiente_limpieza":
         state = cleanup_operation(db, operation.id, storage)
         if operation.limpieza_clave != operation.anterior_clave or state == "cancelada":
@@ -131,6 +145,8 @@ def replace_photo(location_id: int, data: PhotographReplace, actor: User, db: Se
         operation.ultimo_error = "La fotografía cambió antes de publicar"
         db.commit()
         raise HTTPException(status_code=409, detail="La fotografía cambió; el reemplazo requiere revisión")
+    if validate is not None:
+        validate(location)
     try:
         remote = storage.get(new_key)
         if remote is None:
@@ -146,6 +162,8 @@ def replace_photo(location_id: int, data: PhotographReplace, actor: User, db: Se
     old_sha = photo.sha256
     if db.get_bind().dialect.name == "postgresql":
         db.execute(text("SELECT set_config('app.usuario_id', :actor, true)"), {"actor": str(actor.id)})
+    if publish is not None:
+        publish(location)
     photo.storage_bucket = BUCKET
     photo.storage_clave = new_key
     photo.sha256 = digest

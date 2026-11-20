@@ -13,6 +13,7 @@ import { UsersPage } from './pages/UsersPage'
 import { FieldLocationPage } from './pages/FieldLocationPage'
 import { LocationSearchPage } from './pages/LocationSearchPage'
 import { JornadaPage } from './pages/JornadaPage'
+import { UpdateReasonsPage } from './pages/UpdateReasonsPage'
 
 function LocalJornada({ mode }: { mode: 'camera' | 'gallery' }) {
   if (localStorage.getItem('vistageo_jornada_habilitada') !== 'true') {
@@ -53,6 +54,7 @@ export default function App() {
                     <Route path="/registrar-ubicacion" element={<FieldLocationPage />} />
                     <Route path="/consultar-ubicacion" element={<LocationSearchPage />} />
                     <Route path="/procedencia" element={<SourcesPage />} />
+                    <Route path="/motivos-actualizacion" element={<UpdateReasonsPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Layout>

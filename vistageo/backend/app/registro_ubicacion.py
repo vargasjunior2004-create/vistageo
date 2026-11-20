@@ -116,6 +116,9 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
     db.add(photo)
     db.flush()
     location.revision_actual_id = revision.id
+    location.latitud = revision.latitud
+    location.longitud = revision.longitud
+    location.url_gps = revision.url_gps
     operation.fotografia_id = photo.id
     operation.estado = "finalizada"
     operation.intentos += 1

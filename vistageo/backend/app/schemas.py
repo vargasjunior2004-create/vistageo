@@ -157,6 +157,52 @@ class PhotographReplace(RequestModel):
     fotografia_base64: str = Field(min_length=1, max_length=12 * 1024 * 1024)
 
 
+class UpdateReasonCreate(RequestModel):
+    nombre: str = Field(min_length=1, max_length=160, strict=True)
+
+    @field_validator("nombre")
+    @classmethod
+    def valid_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value or "\x00" in value:
+            raise ValueError("Nombre de motivo inválido")
+        return value
+
+
+class UpdateReasonEdit(UpdateReasonCreate):
+    activo: StrictBool
+
+
+class UpdateReasonRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    nombre: str
+    activo: bool
+
+
+class LocationUpdate(RequestModel):
+    idempotencia: UUID
+    version: int = Field(ge=0, strict=True)
+    motivo_id: int = Field(gt=0, strict=True)
+    observacion: str | None = Field(default=None, max_length=2000)
+    latitud: Decimal | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
+    longitud: Decimal | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
+    fotografia_base64: str | None = Field(default=None, min_length=1, max_length=12 * 1024 * 1024)
+    foto_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def valid_changes(self) -> Self:
+        if (self.latitud is None) != (self.longitud is None):
+            raise ValueError("Latitud y longitud deben indicarse juntas")
+        if (self.fotografia_base64 is None) != (self.foto_version is None):
+            raise ValueError("La fotografía requiere su versión")
+        if self.latitud is None and self.fotografia_base64 is None:
+            raise ValueError("Selecciona una fotografía o coordenadas")
+        if self.observacion is not None and "\x00" in self.observacion:
+            raise ValueError("Observación inválida")
+        return self
+
+
 class LocationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -165,6 +211,10 @@ class LocationRead(BaseModel):
     creado_en: datetime | None = None
     creado_por_nombre: str | None = None
     registro_pendiente: bool | None = None
+    latitud: Decimal | None = None
+    longitud: Decimal | None = None
+    url_gps: str | None = None
+    version: int = 0
 
 
 class LocationRevisionCreate(RequestModel):

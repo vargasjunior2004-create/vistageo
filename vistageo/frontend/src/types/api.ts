@@ -26,6 +26,22 @@ export type Location = {
   creado_en: string | null
   creado_por_nombre: string | null
   registro_pendiente: boolean | null
+  latitud: string | null
+  longitud: string | null
+  url_gps: string | null
+  version: number
+}
+
+export type UpdateReason = { id: number; nombre: string; activo: boolean }
+export type LocationUpdateAudit = {
+  id: number
+  usuario: string
+  fecha: string
+  kardex: string
+  motivo: string
+  observacion: string | null
+  fachada: boolean
+  gps: boolean
 }
 
 export type LocationRevision = {

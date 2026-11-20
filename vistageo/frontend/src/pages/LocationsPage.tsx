@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiRequest } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { LocationPhoto } from '../components/LocationPhoto'
+import { UpdateLocation } from '../components/UpdateLocation'
 import type { Location, LocationRevision } from '../types/api'
 
 export function LocationsPage() {
+  const { user, hasPermission } = useAuth()
   const pageSize = 100
   const [locations, setLocations] = useState<Location[]>([])
   const [selected, setSelected] = useState<Location | null>(null)
@@ -19,9 +22,8 @@ export function LocationsPage() {
   const [offset, setOffset] = useState(0)
   const [hasNext, setHasNext] = useState(false)
   const deliberateLoad = useRef(false)
-  const [url, setUrl] = useState('')
-  const [lat, setLat] = useState('')
-  const [lng, setLng] = useState('')
+  const [photoVersion, setPhotoVersion] = useState<string | null>(null)
+  const [photoRevision, setPhotoRevision] = useState(0)
 
   const load = useCallback(async (signal?: AbortSignal, activity = false) => {
     setLoading(true)
@@ -71,23 +73,15 @@ export function LocationsPage() {
     return () => controller.abort()
   }, [selected, revisionVersion])
 
-  const addRevision = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selected) return
-    setError('')
+  const refreshSelected = async (id: number) => {
+    setPhotoVersion(null)
+    setPhotoRevision((value) => value + 1)
     try {
-      const body: Record<string, unknown> = {}
-      if (url) body.url_gps = url
-      if (lat) body.latitud = lat
-      if (lng) body.longitud = lng
-      await apiRequest(`/ubicaciones/${selected.id}/revisiones`, { method: 'POST', body })
-      setUrl('')
-      setLat('')
-      setLng('')
+      const current = await apiRequest<Location>(`/ubicaciones/${id}`)
+      setSelected((previous) => previous?.id === id ? current : previous)
       setRevisionVersion((version) => version + 1)
-      load()
     } catch (err) {
-      setError((err as Error).message)
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar la ficha.')
     }
   }
 
@@ -113,12 +107,12 @@ export function LocationsPage() {
           {locations.map((loc) => (
             <button
               key={loc.id}
-              onClick={() => setSelected(loc)}
+              onClick={() => { setPhotoVersion(null); setSelected(loc) }}
               className={`rounded-2xl p-4 text-left shadow transition ${selected?.id === loc.id ? 'bg-blue-50 ring-2 ring-blue-600' : 'bg-white hover:bg-slate-50'}`}
             >
               <p className="font-semibold text-slate-900">#{loc.id}</p>
               <p className="text-sm text-slate-600">{loc.kardex}</p>
-              <p className="text-xs text-slate-400">Revisión actual: {loc.revision_actual_id ?? '—'}</p>
+              <p className="text-xs text-slate-400">Última revisión histórica: {loc.revision_actual_id ?? '—'}</p>
             </button>
           ))}
         </div>
@@ -131,16 +125,13 @@ export function LocationsPage() {
 
       {selected && (
         <div className="space-y-3 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
-          <h2 className="font-semibold">Revisiones de {selected.kardex}</h2>
-          <LocationPhoto key={selected.id} locationId={selected.id} />
-          <form onSubmit={addRevision} className="grid gap-2 sm:grid-cols-3">
-            <Input label="URL GPS" value={url} onChange={(e) => setUrl(e.target.value)} />
-            <Input label="Latitud" value={lat} onChange={(e) => setLat(e.target.value)} />
-            <Input label="Longitud" value={lng} onChange={(e) => setLng(e.target.value)} />
-            <div className="sm:col-span-3">
-              <Button type="submit">Agregar revisión</Button>
-            </div>
-          </form>
+          <h2 className="font-semibold">Ubicación de {selected.kardex}</h2>
+          <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
+          <p className="text-sm text-slate-600">GPS vigente: {selected.latitud ?? '—'}, {selected.longitud ?? '—'} {selected.url_gps ?? ''}</p>
+          {user && <UpdateLocation key={selected.id} userId={user.id} location={selected} photoVersion={photoVersion}
+            canPhoto={hasPermission('ubicaciones.fotografia.editar')} canGps={hasPermission('ubicaciones.gps.editar')}
+            onUpdated={() => void refreshSelected(selected.id)} />}
+          <h3 className="font-semibold">Revisiones históricas</h3>
           <ul className="space-y-2">
             {revisions.map((r) => (
               <li key={r.id} className="rounded-lg border border-slate-200 p-3 text-sm">

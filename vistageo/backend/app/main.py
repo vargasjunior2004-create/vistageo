@@ -16,8 +16,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload
 
 from app.database import get_db
-from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, User, as_utc, now_utc
-from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RoleCreate, SessionUserRead, UserCreate, UserRead, UserUpdate
+from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, UpdateReason, User, as_utc, now_utc
+from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LocationUpdate, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RoleCreate, SessionUserRead, UpdateReasonCreate, UpdateReasonEdit, UpdateReasonRead, UserCreate, UserRead, UserUpdate
+from app.actualizacion_ubicacion import update_location
 from app.fotografia import photo_version, recovery_loop, replace_photo
 from app.registro_ubicacion import register_location
 from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, PERMISSIONS, PERMISSION_MANAGERS, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, token_hash, verify_password
@@ -377,6 +378,50 @@ def create_field_location(data: FieldLocationCreate, actor: User = Depends(curre
     return register_location(data, actor, db, storage)
 
 
+@app.get("/motivos-actualizacion", response_model=list[UpdateReasonRead])
+def list_update_reasons(
+    todos: bool = False, actor: User = Depends(current_user), db: Session = Depends(get_db),
+) -> list[UpdateReason]:
+    if todos:
+        require_permission_manager(actor)
+    else:
+        require_permission(actor, "ubicaciones.consultar")
+    query = select(UpdateReason).order_by(UpdateReason.nombre, UpdateReason.id)
+    if not todos:
+        query = query.where(UpdateReason.activo.is_(True))
+    return list(db.scalars(query).all())
+
+
+@app.post("/motivos-actualizacion", response_model=UpdateReasonRead, status_code=201)
+def create_update_reason(
+    data: UpdateReasonCreate, actor: User = Depends(current_user), db: Session = Depends(get_db),
+) -> UpdateReason:
+    require_permission_manager(actor)
+    reason = UpdateReason(nombre=data.nombre, activo=True)
+    db.add(reason)
+    db.flush()
+    audit(db, "CREAR_MOTIVO_ACTUALIZACION", actor.id, details={"motivo_id": reason.id, "nombre": reason.nombre})
+    commit(db)
+    return reason
+
+
+@app.put("/motivos-actualizacion/{reason_id}", response_model=UpdateReasonRead)
+def edit_update_reason(
+    reason_id: int, data: UpdateReasonEdit, actor: User = Depends(current_user), db: Session = Depends(get_db),
+) -> UpdateReason:
+    require_permission_manager(actor)
+    reason = db.scalar(select(UpdateReason).where(UpdateReason.id == reason_id).with_for_update())
+    if reason is None:
+        raise HTTPException(status_code=404, detail="Motivo no encontrado")
+    before = {"nombre": reason.nombre, "activo": reason.activo}
+    reason.nombre, reason.activo = data.nombre, data.activo
+    audit(db, "EDITAR_MOTIVO_ACTUALIZACION", actor.id, details={
+        "motivo_id": reason.id, "antes": before, "despues": {"nombre": reason.nombre, "activo": reason.activo},
+    })
+    commit(db)
+    return reason
+
+
 @app.get("/ubicaciones", response_model=list[LocationRead])
 def list_locations(
     kardex: str | None = None,
@@ -467,12 +512,55 @@ def update_location_photo(
 ) -> dict[str, str]:
     require_permission(actor, "ubicaciones.consultar")
     require_permission(actor, "ubicaciones.fotografia.editar")
+    operation = db.scalar(select(PhotoOperation).where(PhotoOperation.idempotencia == data.idempotencia))
+    if operation is None or operation.solicitud_sha256 is not None or operation.estado not in ("finalizada", "pendiente_limpieza"):
+        raise HTTPException(status_code=409, detail="El reemplazo requiere motivo; usa el formulario de actualización")
     try:
         storage = Storage()
     except RuntimeError as exc:
         logger.error("Storage no está disponible: %s", exc)
         raise HTTPException(status_code=503, detail="No se pudo preparar Storage") from exc
     return {"estado": replace_photo(location_id, data, actor, db, storage)}
+
+
+@app.put("/ubicaciones/{location_id}/actualizacion")
+def update_location_data(
+    location_id: int, data: LocationUpdate, actor: User = Depends(current_user), db: Session = Depends(get_db),
+) -> dict[str, str]:
+    require_permission(actor, "ubicaciones.consultar")
+    if data.fotografia_base64 is not None:
+        require_permission(actor, "ubicaciones.fotografia.editar")
+    if data.latitud is not None:
+        require_permission(actor, "ubicaciones.gps.editar")
+    storage = None
+    if data.fotografia_base64 is not None:
+        try:
+            storage = Storage()
+        except RuntimeError as exc:
+            logger.error("Storage no está disponible: %s", exc)
+            raise HTTPException(status_code=503, detail="No se pudo preparar Storage") from exc
+    return {"estado": update_location(location_id, data, actor, db, storage)}
+
+
+@app.get("/ubicaciones/{location_id}/actualizaciones")
+def list_location_updates(
+    location_id: int, limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0), actor: User = Depends(current_user), db: Session = Depends(get_db),
+) -> list[dict]:
+    require_permission(actor, "ubicaciones.consultar")
+    if db.get(Location, location_id) is None:
+        raise HTTPException(status_code=404, detail="Ubicación no encontrada")
+    rows = db.execute(
+        select(AuditRecord, User.username).join(User, User.id == AuditRecord.usuario_id)
+        .where(AuditRecord.ubicacion_id == location_id, AuditRecord.accion == "ACTUALIZAR_DATOS_UBICACION")
+        .order_by(AuditRecord.ocurrido_en.desc(), AuditRecord.id.desc()).limit(limit).offset(offset)
+    ).all()
+    return [{
+        "id": event.id, "usuario": username, "fecha": event.ocurrido_en,
+        "kardex": event.detalles["kardex"], "motivo": event.detalles["motivo"],
+        "observacion": event.detalles["observacion"], "fachada": event.detalles["fachada"],
+        "gps": event.detalles["gps"],
+    } for event, username in rows]
 
 
 @app.get("/ubicaciones/{location_id}/revisiones", response_model=list[LocationRevisionRead])
@@ -499,23 +587,7 @@ def create_location_revision(
     location_id: int, data: LocationRevisionCreate, actor: User = Depends(current_user), db: Session = Depends(get_db),
 ) -> LocationRevision:
     require_admin(actor)
-    location = db.scalar(select(Location).where(Location.id == location_id).with_for_update())
-    if location is None:
-        raise HTTPException(status_code=404, detail="Ubicación no encontrada")
-    previous_id = location.revision_actual_id
-    revision = LocationRevision(
-        ubicacion_id=location.id, url_gps=data.url_gps, latitud=data.latitud, longitud=data.longitud,
-        fecha_evento=data.fecha_evento, responsable_id=actor.id, cerrada=True,
-    )
-    db.add(revision)
-    db.flush()
-    location.revision_actual_id = revision.id
-    db.add(AuditRecord(
-        usuario_id=actor.id, ubicacion_id=location.id, accion="ACTUALIZAR_UBICACION",
-        detalles={"revision_id": revision.id, "revision_anterior_id": previous_id},
-    ))
-    commit(db)
-    return revision
+    raise HTTPException(status_code=410, detail="Las actualizaciones requieren motivo; usa el formulario de actualización")
 
 
 @app.get("/procedencia", response_model=list[HistoricalSourceRead])

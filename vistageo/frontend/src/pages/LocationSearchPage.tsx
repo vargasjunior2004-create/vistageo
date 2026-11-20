@@ -5,21 +5,21 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { LocationPhoto } from '../components/LocationPhoto'
-import { ReplaceLocationPhoto } from '../components/ReplaceLocationPhoto'
+import { UpdateLocation } from '../components/UpdateLocation'
 import { googleMapsLink } from '../services/maps'
-import type { Location, LocationRevision } from '../types/api'
+import type { Location, LocationUpdateAudit } from '../types/api'
 
 const PAGE_SIZE = 25
 const DEBOUNCE_MS = 350
 
-function mapsLink(revision: LocationRevision | null): string | null {
-  if (!revision) return null
-  if (revision.latitud !== null && revision.longitud !== null) {
-    return googleMapsLink(revision.latitud, revision.longitud)
+function mapsLink(location: Location | null): string | null {
+  if (!location) return null
+  if (location.latitud !== null && location.longitud !== null) {
+    return googleMapsLink(location.latitud, location.longitud)
   }
-  if (!revision.url_gps) return null
+  if (!location.url_gps) return null
   try {
-    const url = new URL(revision.url_gps)
+    const url = new URL(location.url_gps)
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null
   } catch {
     return null
@@ -71,14 +71,16 @@ export function LocationSearchPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Location | null>(null)
-  const [revision, setRevision] = useState<LocationRevision | null>(null)
-  const [revisionLoading, setRevisionLoading] = useState(false)
-  const [revisionError, setRevisionError] = useState('')
+  const [history, setHistory] = useState<LocationUpdateAudit[]>([])
+  const [historyError, setHistoryError] = useState('')
+  const [historyMore, setHistoryMore] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [photoVersion, setPhotoVersion] = useState<string | null>(null)
   const [photoRevision, setPhotoRevision] = useState(0)
   const controllerRef = useRef<AbortController | null>(null)
   const sentinel = useRef<HTMLDivElement>(null)
   const detail = useRef<HTMLElement>(null)
+  const selectedId = selected?.id
 
   useEffect(() => {
     if (!allowed || query.length === 0) return
@@ -120,27 +122,54 @@ export function LocationSearchPage() {
   }, [hasMore, loading, error, selected, results])
 
   useEffect(() => {
-    if (!selected) return
+    if (selectedId === undefined) return
     detail.current?.focus()
-    if (selected.revision_actual_id === null) return
+  }, [selectedId])
+
+  useEffect(() => {
+    if (selectedId === undefined) return
     const controller = new AbortController()
-    const params = new URLSearchParams({ revision_id: String(selected.revision_actual_id) })
-    apiRequest<LocationRevision[]>(`/ubicaciones/${selected.id}/revisiones?${params}`, { signal: controller.signal, activity: true })
+    apiRequest<LocationUpdateAudit[]>(`/ubicaciones/${selectedId}/actualizaciones?limit=26`, { signal: controller.signal, activity: true })
       .then((items) => {
         if (controller.signal.aborted) return
-        const current = items.find((item) => item.id === selected.revision_actual_id)
-        if (current) setRevision(current)
-        else setRevisionError('La revisión vigente no está disponible.')
+        setHistory(items.slice(0, 25))
+        setHistoryMore(items.length > 25)
       })
       .catch((err: unknown) => {
-        if (!controller.signal.aborted) setRevisionError(err instanceof Error ? err.message : 'No se pudo cargar la ubicación.')
+        if (!controller.signal.aborted) setHistoryError(err instanceof Error ? err.message : 'No se pudo cargar el historial.')
       })
-      .finally(() => { if (!controller.signal.aborted) setRevisionLoading(false) })
+      .finally(() => { if (!controller.signal.aborted) setHistoryLoading(false) })
     return () => controller.abort()
-  }, [selected])
+  }, [selectedId, photoRevision])
+
+  const refreshLocation = async (locationId: number) => {
+    setPhotoVersion(null)
+    setHistoryLoading(true)
+    setHistoryError('')
+    setPhotoRevision((value) => value + 1)
+    try {
+      const current = await apiRequest<Location>(`/ubicaciones/${locationId}`)
+      setSelected((previous) => previous?.id === locationId ? { ...current, registro_pendiente: previous.registro_pendiente } : previous)
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'No se pudo actualizar la ficha.')
+    }
+  }
+
+  const moreHistory = async () => {
+    if (!selected) return
+    setHistoryLoading(true)
+    setHistoryError('')
+    try {
+      const rows = await apiRequest<LocationUpdateAudit[]>(`/ubicaciones/${selected.id}/actualizaciones?limit=26&offset=${history.length}`)
+      setHistory((previous) => [...previous, ...rows.slice(0, 25)])
+      setHistoryMore(rows.length > 25)
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'No se pudo cargar el historial.')
+    } finally { setHistoryLoading(false) }
+  }
 
   if (!allowed) return <p>No tienes permiso para esta función.</p>
-  const link = mapsLink(revision)
+  const link = mapsLink(selected)
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -175,20 +204,31 @@ export function LocationSearchPage() {
           </div>
           {selected.registro_pendiente && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Este registro está pendiente o requiere revisión. Contacta a un administrador si no tienes el borrador original.</p>}
           <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
-          {user && hasPermission('ubicaciones.fotografia.editar') && <ReplaceLocationPhoto
+          {user && (hasPermission('ubicaciones.fotografia.editar') || hasPermission('ubicaciones.gps.editar')) && <UpdateLocation
             key={selected.id}
             userId={user.id}
-            locationId={selected.id}
-            version={photoVersion}
-            onUpdated={() => { setPhotoVersion(null); setPhotoRevision((value) => value + 1) }}
+            location={selected}
+            photoVersion={photoVersion}
+            canPhoto={hasPermission('ubicaciones.fotografia.editar')}
+            canGps={hasPermission('ubicaciones.gps.editar')}
+            onUpdated={() => void refreshLocation(selected.id)}
           />}
-          {revisionLoading && <p role="status" className="text-sm text-slate-500">Cargando ubicación...</p>}
-          {revisionError && <p role="alert" className="text-sm text-red-700">{revisionError}</p>}
-          {!revisionLoading && !revisionError && (revision
-            ? <p className="text-sm text-slate-600">{revision.latitud ?? '—'}, {revision.longitud ?? '—'}</p>
-            : <p className="text-sm text-slate-600">No hay coordenadas o enlace GPS vigente.</p>)}
-          {revision?.url_gps && <p className="break-all text-sm text-slate-600">URL GPS: {revision.url_gps}</p>}
+          {selected.latitud !== null ? <p className="text-sm text-slate-600">{selected.latitud}, {selected.longitud}</p> : <p className="text-sm text-slate-600">No hay coordenadas vigentes.</p>}
+          {selected.url_gps && <p className="break-all text-sm text-slate-600">URL GPS: {selected.url_gps}</p>}
           {link && <><p className="break-all text-sm text-slate-600">Enlace: {link}</p><a className="inline-block rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a></>}
+          <section className="space-y-2 border-t border-slate-100 pt-4">
+            <h3 className="font-semibold">Historial de actualizaciones</h3>
+            {historyError && <p role="alert" className="text-sm text-red-700">{historyError}</p>}
+            {historyLoading && <p role="status" className="text-sm text-slate-500">Cargando historial...</p>}
+            {!historyLoading && history.length === 0 && !historyError && <p className="text-sm text-slate-600">Aún no hay actualizaciones registradas.</p>}
+            <ul className="space-y-2">{history.map((item) => <li key={item.id} className="rounded-xl bg-slate-50 p-3 text-sm">
+              <p className="font-semibold">{item.motivo}</p>
+              <p>{item.usuario} · {new Date(item.fecha).toLocaleString()}</p>
+              <p>{[item.fachada && 'Fachada', item.gps && 'GPS'].filter(Boolean).join(' y ')}</p>
+              {item.observacion && <p className="whitespace-pre-wrap">{item.observacion}</p>}
+            </li>)}</ul>
+            {historyMore && <Button type="button" variant="secondary" disabled={historyLoading} onClick={() => void moreHistory()}>Ver más</Button>}
+          </section>
         </section>
       ) : query.length > 0 && (
         <section aria-label="Coincidencias de kardex" className="space-y-3">
@@ -197,9 +237,9 @@ export function LocationSearchPage() {
             {results.map((location) => (
               <li key={location.id}>
                 <button type="button" onClick={() => {
-                  setRevision(null)
-                  setRevisionError('')
-                  setRevisionLoading(location.revision_actual_id !== null)
+                  setHistory([])
+                  setHistoryError('')
+                  setHistoryLoading(true)
                   setPhotoVersion(null)
                   setSelected(location)
                 }} className="flex w-full items-center gap-4 rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-slate-100 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
@@ -209,7 +249,7 @@ export function LocationSearchPage() {
                     <VisibleWhitespace value={location.kardex} />
                     <span className="mt-1 block text-sm text-slate-600">Registrado por: {location.creado_por_nombre ?? 'Desconocido'}</span>
                     {location.registro_pendiente && <span className="mt-1 block text-xs font-semibold text-amber-800">Registro pendiente o requiere revisión</span>}
-                    <span className="mt-1 block text-xs text-slate-500">Ubicación #{location.id} · {location.revision_actual_id === null ? 'Sin revisión vigente' : 'Con revisión vigente'}</span>
+                    <span className="mt-1 block text-xs text-slate-500">Ubicación #{location.id} · {location.latitud === null && !location.url_gps ? 'Sin GPS' : 'Con GPS'}</span>
                   </span>
                   <span aria-hidden="true" className="text-xl text-blue-700">›</span>
                 </button>

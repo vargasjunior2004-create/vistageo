@@ -151,7 +151,8 @@ def save_plan(plan: LocationPlan) -> tuple[int, int]:
             location = locations.get(kardex)
             if source is None or source.kardex != kardex or source.estado_revision != "CONFIRMADO" or location is None:
                 raise RuntimeError("Falta una asociación o ubicación para un documento histórico")
-            if location.revision_actual_id is not None:
+            if (location.revision_actual_id is not None or location.latitud is not None
+                    or location.longitud is not None or location.url_gps is not None):
                 skipped += 1
                 continue
             latitude, longitude = coordinates(url)
@@ -174,7 +175,12 @@ def save_plan(plan: LocationPlan) -> tuple[int, int]:
             table = Location.__table__
             db.execute(
                 update(table).where(table.c.id == updates.c.ubicacion_id)
-                .values(revision_actual_id=updates.c.revision_id)
+                .values(
+                    revision_actual_id=updates.c.revision_id,
+                    latitud=select(LocationRevision.latitud).where(LocationRevision.id == updates.c.revision_id).scalar_subquery(),
+                    longitud=select(LocationRevision.longitud).where(LocationRevision.id == updates.c.revision_id).scalar_subquery(),
+                    url_gps=select(LocationRevision.url_gps).where(LocationRevision.id == updates.c.revision_id).scalar_subquery(),
+                )
             )
             db.execute(insert(AuditRecord), [
                 {"ubicacion_id": location_id, "accion": "IMPORTAR_UBICACION_HISTORICA",

@@ -466,7 +466,18 @@ def test_registro_campo_en_postgresql_preserva_auditoria_y_reintentos(db):
                           {"actor": actor_id, "id": location.id}).scalar_one() == 1
 
 
-def test_api_usuarios_y_roles_en_postgresql(db):
+def test_api_usuarios_y_roles_en_postgresql(db, monkeypatch):
+    objects = {"foto-original.webp": b"original"}
+
+    class FakeStorage:
+        def get(self, key):
+            return objects.get(key)
+        def put(self, key, content):
+            objects[key] = content
+        def delete(self, key):
+            objects.pop(key, None)
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
     admin_role = db.execute(text("INSERT INTO roles (nombre) VALUES ('ADMINISTRADOR') RETURNING id")).scalar_one()
     tech_role = db.execute(text("INSERT INTO roles (nombre) VALUES ('TECNICO') RETURNING id")).scalar_one()
     for permission in ("usuarios.consultar", "usuarios.gestionar", "roles.consultar"):
@@ -500,11 +511,38 @@ def test_api_usuarios_y_roles_en_postgresql(db):
             assert client.post("/contratos", headers=headers, json={"kardex": "a-1"}).status_code == 201
             location = client.post("/ubicaciones", headers=headers, json={"kardex": "a-1"})
             assert location.status_code == 201
-            url = f"/ubicaciones/{location.json()['id']}/revisiones"
-            first = client.post(url, headers=headers, json={"url_gps": "https://maps.example/one"})
-            second = client.post(url, headers=headers, json={"latitud": -16.5, "longitud": -68.1})
-            assert first.status_code == second.status_code == 201
-            assert client.get(f"/ubicaciones/{location.json()['id']}", headers=headers).json()["revision_actual_id"] == second.json()["id"]
+            location_id = location.json()["id"]
+            url = f"/ubicaciones/{location_id}/revisiones"
+            assert client.post(url, headers=headers, json={"latitud": -16.5, "longitud": -68.1}).status_code == 410
+            reason = client.post("/motivos-actualizacion", headers=headers, json={"nombre": "Corrección"}).json()
+            body = {"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
+                    "latitud": -16.5, "longitud": -68.1}
+            update_path = f"/ubicaciones/{location_id}/actualizacion"
+            assert client.put(update_path, headers=headers, json=body).status_code == 200
+            assert client.put(update_path, headers=headers, json=body).status_code == 200
+            assert client.get(f"/ubicaciones/{location_id}", headers=headers).json()["revision_actual_id"] is None
+            actor_id = db.execute(text("SELECT id FROM usuarios WHERE nombre_usuario='ADMIN-PRUEBA'")).scalar_one()
+            db.execute(text("SELECT set_config('app.usuario_id', :actor, true)"), {"actor": str(actor_id)})
+            db.execute(text("""
+                INSERT INTO fotografias (ubicacion_id, storage_bucket, storage_clave, registrado_por)
+                VALUES (:id, 'fachada', 'foto-original.webp', :actor)
+            """), {"id": location_id, "actor": actor_id})
+            photo_path = f"/ubicaciones/{location_id}/fotografia"
+            photo_version = client.get(photo_path, headers=headers).headers["x-foto-version"]
+            image = io.BytesIO()
+            Image.new("RGB", (10, 10), "green").save(image, format="JPEG")
+            both = {"idempotencia": str(uuid4()), "version": 1, "motivo_id": reason["id"],
+                    "latitud": -15, "longitud": -67, "foto_version": photo_version,
+                    "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
+            assert client.put(update_path, headers=headers, json=both).json() == {"estado": "finalizada"}
+            assert client.put(update_path, headers=headers, json=both).json() == {"estado": "finalizada"}
+            assert "foto-original.webp" not in objects
+            events = client.get(f"/ubicaciones/{location_id}/actualizaciones", headers=headers).json()
+            assert len(events) == 2 and events[0]["motivo"] == "Corrección"
+            rejected(db, "UPDATE auditoria SET detalles='{}' WHERE id=:id", {"id": events[0]["id"]})
+            rejected(db, "DELETE FROM auditoria WHERE id=:id", {"id": events[0]["id"]})
+            rejected(db, "UPDATE operaciones_fotografia SET solicitud_sha256='different' WHERE idempotencia=CAST(:id AS uuid)",
+                     {"id": both["idempotencia"]})
             source_id = db.execute(text("""
                 INSERT INTO procedencia_historica (ruta_original, tipo)
                 VALUES ('raiz/a-1/documento.docx', 'documento') RETURNING id
@@ -615,7 +653,7 @@ def test_tablas_y_objetos_no_son_accesibles_a_roles_supabase(db):
     tables = [
         "alembic_version", "roles", "permisos", "rol_permisos", "usuarios", "sesiones",
         "auditoria_usuarios", "contratos", "procedencia_historica", "ubicaciones",
-        "actividades", "auditoria", "fotografias", "operaciones_fotografia", "revisiones_ubicacion",
+        "actividades", "auditoria", "fotografias", "operaciones_fotografia", "revisiones_ubicacion", "motivos_actualizacion",
     ]
     privileges = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]
     if int(db.execute(text("SHOW server_version_num")).scalar_one()) >= 170000:
@@ -635,7 +673,7 @@ def test_tablas_y_objetos_no_son_accesibles_a_roles_supabase(db):
         SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relkind='S' AND c.relname = ANY(:names)
     """), {"names": [name + "_id_seq" for name in tables]}).scalars().all()
-    assert len(sequences) == 12
+    assert len(sequences) == 13
     for role in roles:
         for sequence in sequences:
             for privilege in ("USAGE", "SELECT", "UPDATE"):
@@ -645,7 +683,7 @@ def test_tablas_y_objetos_no_son_accesibles_a_roles_supabase(db):
         for function in (
             "impedir_edicion_auditoria_usuarios", "proteger_revision_cerrada",
             "verificar_revision_actual", "preparar_fotografia", "auditar_fotografia", "proteger_creacion_ubicacion",
-            "proteger_operacion_fotografia", "impedir_edicion_auditoria",
+            "proteger_operacion_fotografia", "impedir_edicion_auditoria", "proteger_solicitud_fotografia",
         ):
             assert not db.execute(text("SELECT has_function_privilege(:role, :function, 'EXECUTE')"), {
                 "role": role, "function": f"public.{function}()",

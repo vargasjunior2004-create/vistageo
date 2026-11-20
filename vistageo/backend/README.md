@@ -56,12 +56,19 @@ fotografía y su requisito de consulta para los roles aprobados.
 ubicación. Recupera ambos solo cuando existe exactamente un evento de creación
 de campo o administrativa con usuario en la auditoría; las demás ubicaciones
 quedan con valores desconocidos. Un trigger impide modificarlos después.
+`0008_update_reasons` agrega el catálogo de motivos, protegido mediante RLS y
+revocación de privilegios para los roles de Supabase.
+`0009_current_location_updates` copia la ubicación vigente desde la revisión
+actual, conservando las revisiones anteriores, e incorpora el permiso
+`ubicaciones.gps.editar` sin asignarlo a ningún rol. Añade la referencia al
+motivo y la idempotencia a la auditoría. Los datos sin revisión vigente
+conservan valores GPS nulos.
 Una actualización Alembic normal desde `0004` ejecuta las asignaciones de
 `0005` y `0006`; no debe utilizarse cuando se haya decidido conservar
 exactamente los permisos actuales sin preparar y verificar un procedimiento
 transaccional específico.
 `sql/esquema_postgresql.sql` es la salida de `alembic upgrade head --sql` para
-una **base nueva y vacía**: incluye las siete revisiones y `alembic_version`.
+una **base nueva y vacía**: incluye las nueve revisiones y `alembic_version`.
 No ejecutar ese script sobre un esquema ya existente; para actualizar una
 instalación existente se utiliza Alembic desde su revisión actual, previa
 autorización y copia de seguridad. No ejecutar el SQL y Alembic como dos
@@ -92,10 +99,11 @@ para el dialecto PostgreSQL, sin conectar al servidor:
 | `roles` / `Role`, `permisos` / `Permission`, `rol_permisos` | Catálogo de roles y permisos; cada usuario tiene exactamente un rol y cada rol puede tener varios permisos. |
 | `usuarios` / `User`, `sesiones` / `AuthSession`, `auditoria_usuarios` / `AuditEvent` | Cuentas, sesiones y auditoría del módulo existente. |
 | `contratos` / `Contract` | `kardex` textual es clave primaria con colación `C`: se conserva sin normalización y solo se rechazan duplicados exactos y valores vacíos. |
-| `ubicaciones` / `Location` | Como máximo una por contrato; conserva creador y fecha originales cuando se conocen. Su revisión actual es opcional y debe ser cerrada y pertenecer a la misma ubicación. |
+| `ubicaciones` / `Location` | Como máximo una por contrato; conserva creador, fecha y GPS vigentes, y una versión para detectar cambios concurrentes. La referencia a revisión histórica debe pertenecer a la ubicación y estar cerrada. |
 | `revisiones_ubicacion` / `LocationRevision` | Historial de URL y coordenadas; autor y fecha del evento histórico pueden ser desconocidos. Coordenadas juntas y dentro de sus rangos; las revisiones cerradas no se editan ni eliminan. |
 | `fotografias` / `Photograph` | Una fotografía vigente como máximo por ubicación, con referencia al objeto, huella y usuario; en una importación histórica conserva además procedencia y huella original. No contiene la imagen. |
 | `operaciones_fotografia` / `PhotoOperation` | Estado persistente, claves exactas, idempotencia e intentos para coordinación con Storage; `fotografia_id` es informativo, sin FK, para sobrevivir al borrado. |
+| `motivos_actualizacion` / `UpdateReason` | Catálogo de motivos activos e inactivos; no se eliminan mediante la API. Los eventos conservan además el nombre del motivo al momento del cambio. |
 | `actividades` / `Activity` | Actividades asociables a usuario y ubicación, con intervalos válidos. |
 | `auditoria` / `AuditRecord` | Eventos geográficos inmutables; los eventos fotográficos conservan actor, ubicación, fecha e identificador informativo de la foto, sin depender de su existencia. |
 | `procedencia_historica` / `HistoricalSource` | Ruta original, tipo, SHA-256 opcional, estado de revisión y kardex opcional. Una asociación solo debe establecerse tras confirmación; `PENDIENTE` no autoriza a inferir una asociación. |
@@ -163,6 +171,20 @@ clientes no confiables lo suplanten. La consulta de la foto oficial requiere
 `ubicaciones.consultar`; el registro inicial requiere `ubicaciones.registrar`.
 La sustitución requiere tanto `ubicaciones.consultar` como
 `ubicaciones.fotografia.editar`; no permite agregar una foto donde no existe.
+La edición de GPS requiere `ubicaciones.consultar` y `ubicaciones.gps.editar`;
+para modificar ambos se necesitan los tres permisos. El administrador mantiene
+su acceso existente. La administración de motivos se limita a administrador,
+gerente, jefe comercial y jefe operativo.
+
+Cada actualización exige un motivo activo y admite observación opcional. Se
+guardan el GPS vigente, la referencia fotográfica y un evento textual en la
+misma transacción PostgreSQL; el evento conserva kardex, usuario, fecha, nombre
+del motivo y elementos modificados, sin guardar coordenadas anteriores ni
+copias de fotografías. Las revisiones históricas se conservan sin añadir
+revisiones en este flujo. El historial es consultable por quienes pueden
+consultar la ubicación; el trigger existente impide modificarlo o borrarlo.
+Al actualizar GPS se borra la URL vigente anterior, que permanece en su
+revisión histórica si procedía de ella.
 
 Storage y PostgreSQL no comparten transacciones. El importador histórico
 implementa la creación recuperable descrita más abajo. El registro de campo
@@ -267,8 +289,12 @@ despliegue.
 | GET | `/ubicaciones/{id}` | Consultar una ubicación. |
 | POST | `/registro-ubicacion` | Crear contrato si falta, ubicación, revisión y fotografía oficial mediante operación idempotente. |
 | GET | `/ubicaciones/{id}/fotografia` | Descargar la foto privada vigente con permiso de consulta. |
-| PUT | `/ubicaciones/{id}/fotografia` | Reemplazar solo una foto existente con permisos de consulta y edición. |
-| GET, POST | `/ubicaciones/{id}/revisiones` | Consultar el historial o registrar una revisión vigente. |
+| PUT | `/ubicaciones/{id}/fotografia` | Reintentar limpieza o confirmar el resultado de un reemplazo anterior ya publicado; no inicia cambios nuevos. |
+| PUT | `/ubicaciones/{id}/actualizacion` | Actualizar foto, GPS o ambos con motivo obligatorio e idempotencia. |
+| GET | `/ubicaciones/{id}/actualizaciones` | Consultar el historial textual de actualizaciones. |
+| GET | `/ubicaciones/{id}/revisiones` | Consultar las revisiones históricas. Crear revisiones mediante POST ya no está disponible. |
+| GET, POST | `/motivos-actualizacion` | Listar motivos activos para consulta o crear motivos como gestor. `?todos=true` exige ser gestor. |
+| PUT | `/motivos-actualizacion/{id}` | Editar y activar o desactivar un motivo como gestor. |
 | GET | `/procedencia`, `/procedencia/{id}` | Consultar el inventario histórico, solo como administrador. |
 | PUT, DELETE | `/procedencia/{id}/contrato` | Confirmar, corregir o retirar manualmente la asociación con un contrato. |
 
@@ -287,19 +313,30 @@ La búsqueda parcial exige `ubicaciones.consultar` y devuelve páginas por ID
 con `limit` y `offset`. En PostgreSQL utiliza la colación ICU `und-x-icu`,
 que debe estar disponible; SQLite de pruebas solo compara letras ASCII sin
 distinguir mayúsculas.
-La nueva revisión se cierra y se
-convierte en vigente dentro de la misma transacción; las anteriores se
-conservan. Las listas admiten `limit` (máximo 500) y `offset`.
+Las revisiones históricas se conservan. Las listas admiten `limit` (máximo 500)
+y `offset`.
 La foto se obtiene desde el servidor con `SUPABASE_URL` y
 `SUPABASE_SECRET_KEY`, sin compartir la clave ni hacer público el bucket.
 Si hay huella almacenada se verifica antes de entregar los bytes; una
 referencia rota o huella incorrecta devuelve error, no una foto inexistente.
-La respuesta de la foto incluye `X-Foto-Version`. Para reemplazarla, enviar
-`idempotencia` (UUID), `version` (cabecera recibida) y `fotografia_base64`
-al PUT; se rechazan otros campos. Una versión obsoleta devuelve 412 sin
-modificar la foto. Repetir la misma operación y datos permite recuperarse tras
+La respuesta de la foto incluye `X-Foto-Version`. El PUT de actualización
+recibe `idempotencia` (UUID), `version` de la ubicación, `motivo_id`,
+`observacion` opcional y latitud y longitud juntas y/o `fotografia_base64`
+con `foto_version` de la cabecera. Una versión obsoleta devuelve 412 sin
+publicar cambios. Repetir la misma operación y datos permite recuperarse tras
 una interrupción. El estado `pendiente_limpieza` indica que la imagen nueva es
-vigente, pero la eliminación de la anterior aún no está confirmada.
+vigente, pero la eliminación de la anterior aún no está confirmada. Un borrador
+antiguo no publicado puede completarse con motivo desde la nueva interfaz;
+si el motivo de una operación pendiente se desactiva, debe reactivarse para
+reintentarla con los mismos datos.
+
+Antes de desplegar se requiere copia de seguridad, verificar la revisión
+existente y autorizar por separado las migraciones. Coordinar una ventana sin
+escrituras de versiones antiguas de la aplicación: después de copiar el GPS
+no deben crearse revisiones nuevas con código antiguo. Revisar operaciones
+pendientes, aplicar y comprobar el esquema, desplegar backend y frontend de
+la misma versión, crear motivos y asignar el permiso GPS explícitamente a los
+roles aprobados. No se asigna automáticamente a técnicos ni a otros roles.
 
 ## Conexión del frontend y Render
 

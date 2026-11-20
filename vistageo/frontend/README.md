@@ -75,11 +75,16 @@ datos automáticamente.
   como desconocido. El nombre mostrado es el nombre actual de la cuenta.
 - Las herramientas administrativas de contratos y procedencia se conservan,
   pero no aparecen en el menú cotidiano.
-- En la ficha se puede reemplazar una foto existente con los permisos de
-  consulta y edición. Tras confirmarlo, la copia anterior se elimina
+- En la ficha se puede reemplazar una foto existente, actualizar el GPS o
+  hacer ambos cambios con un motivo activo obligatorio y una observación
+  opcional. Los permisos de foto y GPS se comprueban por separado y el
+  historial textual es de solo lectura. Tras confirmar una foto, la copia anterior se elimina
   definitivamente, también si es histórica. Si falla la limpieza, se informa
   como pendiente; el borrador conserva la operación para reintentar desde el
   mismo dispositivo. El navegador no guarda las claves de Supabase.
+- Los administradores, gerente y jefes comercial y operativo pueden agregar,
+  editar, activar y desactivar motivos. El permiso GPS se asigna expresamente
+  desde Roles; no se concede automáticamente por tener permiso de fotografía.
 - Las fotos de jornada permanecen en IndexedDB de este navegador: no se envían
   al backend ni a Supabase. Tras iniciar sesión una vez con un rol habilitado y
   cargar la aplicación de producción, la cámara y galería pueden abrirse sin
@@ -96,5 +101,5 @@ datos automáticamente.
   privadas de la API. Comprueba el funcionamiento offline en el dispositivo
   después de visitar la aplicación con conexión.
 - Antes de habilitar las funciones en una base existente hay que revisar y
-  autorizar por separado las revisiones `0005`, `0006` y `0007`, según el
+  autorizar por separado las revisiones pendientes hasta `0009`, según el
   estado de esa base; el despliegue no las aplica.

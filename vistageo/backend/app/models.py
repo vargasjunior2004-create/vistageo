@@ -107,11 +107,20 @@ class Location(Base):
             ["revision_actual_id", "id"], ["revisiones_ubicacion.id", "revisiones_ubicacion.ubicacion_id"],
             name="ubicaciones_revision_propia", use_alter=True, ondelete="RESTRICT",
         ),
+        CheckConstraint(
+            "(latitud IS NULL AND longitud IS NULL) OR "
+            "(latitud IS NOT NULL AND longitud IS NOT NULL AND latitud BETWEEN -90 AND 90 AND longitud BETWEEN -180 AND 180)",
+            name="ubicaciones_coordenadas_validas",
+        ),
     )
 
     id: Mapped[int] = mapped_column(pk_type, Identity(), primary_key=True)
     kardex: Mapped[str] = mapped_column(exact_text, ForeignKey("contratos.kardex", ondelete="RESTRICT"), unique=True)
     revision_actual_id: Mapped[int | None] = mapped_column(pk_type)
+    latitud: Mapped[Decimal | None] = mapped_column(Numeric)
+    longitud: Mapped[Decimal | None] = mapped_column(Numeric)
+    url_gps: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     creado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
     creador: Mapped[User | None] = relationship(lazy="selectin")
@@ -210,6 +219,7 @@ class PhotoOperation(Base):
 
     id: Mapped[int] = mapped_column(pk_type, Identity(), primary_key=True)
     idempotencia: Mapped[UUID] = mapped_column(Uuid, unique=True)
+    solicitud_sha256: Mapped[str | None] = mapped_column(String(64))
     ubicacion_id: Mapped[int] = mapped_column(ForeignKey("ubicaciones.id", ondelete="RESTRICT"))
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
     procedencia_id: Mapped[int | None] = mapped_column(ForeignKey("procedencia_historica.id", ondelete="RESTRICT"))
@@ -265,6 +275,19 @@ class AuditRecord(Base):
     accion: Mapped[str] = mapped_column(Text)
     ocurrido_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"))
     detalles: Mapped[dict | None] = mapped_column(json_type)
+    motivo_id: Mapped[int | None] = mapped_column(ForeignKey("motivos_actualizacion.id", ondelete="RESTRICT"))
+    operacion_id: Mapped[UUID | None] = mapped_column(Uuid, unique=True)
+
+
+class UpdateReason(Base):
+    __tablename__ = "motivos_actualizacion"
+    __table_args__ = (
+        CheckConstraint("length(trim(nombre)) > 0", name="motivos_actualizacion_nombre_no_vacio"),
+    )
+
+    id: Mapped[int] = mapped_column(pk_type, Identity(), primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(160), nullable=False)
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
 
 class HistoricalSource(Base):

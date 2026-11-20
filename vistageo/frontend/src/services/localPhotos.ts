@@ -18,6 +18,19 @@ export type PhotoReplacementDraft = {
   fotografia_base64: string
 }
 
+export type LocationUpdateBody = {
+  idempotencia: string
+  version: number
+  motivo_id: number
+  observacion: string | null
+  latitud?: string
+  longitud?: string
+  fotografia_base64?: string
+  foto_version?: string
+}
+
+export type LocationUpdateDraft = { body: LocationUpdateBody; legacy: boolean }
+
 const database = 'vistageo-local'
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -89,4 +102,16 @@ export async function savePhotoDraft(userId: number, locationId: number, draft: 
 
 export async function deletePhotoDraft(userId: number, locationId: number): Promise<void> {
   await transaction('borradores', 'readwrite', (store) => store.delete(`foto:${userId}:${locationId}`))
+}
+
+export function getUpdateDraft(userId: number, locationId: number): Promise<LocationUpdateDraft | undefined> {
+  return transaction('borradores', 'readonly', (store) => store.get(`actualizacion:${userId}:${locationId}`))
+}
+
+export async function saveUpdateDraft(userId: number, locationId: number, draft: LocationUpdateDraft): Promise<void> {
+  await transaction('borradores', 'readwrite', (store) => store.put(draft, `actualizacion:${userId}:${locationId}`))
+}
+
+export async function deleteUpdateDraft(userId: number, locationId: number): Promise<void> {
+  await transaction('borradores', 'readwrite', (store) => store.delete(`actualizacion:${userId}:${locationId}`))
 }
