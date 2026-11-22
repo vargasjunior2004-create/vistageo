@@ -30,6 +30,9 @@ export type Location = {
   longitud: string | null
   url_gps: string | null
   metodo_coordenadas: 'GPS_DISPOSITIVO' | 'ENLACE_COMPARTIDO' | null
+  precision_metros: number | null
+  capturado_en: string | null
+  capturado_por: number | null
   version: number
 }
 
@@ -43,6 +46,11 @@ export type LocationUpdateAudit = {
   observacion: string | null
   fachada: boolean
   gps: boolean
+  latitud: string | null
+  longitud: string | null
+  precision_metros: number | null
+  capturado_en: string | null
+  metodo_coordenadas: 'GPS_DISPOSITIVO' | null
 }
 
 export type LocationRevision = {
@@ -53,6 +61,7 @@ export type LocationRevision = {
   latitud: string | null
   longitud: string | null
   fecha_evento: string | null
+  precision_metros: number | null
   registrado_en: string
   responsable_id: number | null
   cerrada: boolean

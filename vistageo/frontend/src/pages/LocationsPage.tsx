@@ -129,6 +129,7 @@ export function LocationsPage() {
           <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
           <p className="text-sm text-slate-600">Coordenadas vigentes: {selected.latitud ?? '—'}, {selected.longitud ?? '—'} {selected.url_gps ?? ''}</p>
           <p className="text-sm text-slate-600">Origen vigente: {selected.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : selected.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
+          <p className="text-sm text-slate-600">Precisión estimada: {selected.precision_metros === null ? 'No disponible' : `${selected.precision_metros} m`}</p>
           {user && <UpdateLocation key={selected.id} userId={user.id} location={selected} photoVersion={photoVersion}
             canPhoto={hasPermission('ubicaciones.fotografia.editar')} canGps={hasPermission('ubicaciones.gps.editar')}
             onUpdated={() => void refreshSelected(selected.id)} />}
@@ -138,6 +139,7 @@ export function LocationsPage() {
               <li key={r.id} className="rounded-lg border border-slate-200 p-3 text-sm">
                 <p className="font-medium">#{r.id} {r.cerrada ? '(cerrada)' : ''}</p>
                 <p>Origen: {r.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : r.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
+                <p>Precisión estimada: {r.precision_metros === null ? 'No disponible' : `${r.precision_metros} m`}</p>
                 <p className="text-slate-600">{r.url_gps ?? 'Sin URL'}</p>
                 <p className="text-xs text-slate-400">
                   {r.latitud ?? '—'}, {r.longitud ?? '—'} · {new Date(r.registrado_en).toLocaleString()}

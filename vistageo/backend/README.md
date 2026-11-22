@@ -71,7 +71,7 @@ Una actualización Alembic normal desde `0004` ejecuta las asignaciones de
 exactamente los permisos actuales sin preparar y verificar un procedimiento
 transaccional específico.
 `sql/esquema_postgresql.sql` es la salida de `alembic upgrade head --sql` para
-una **base nueva y vacía**: incluye las diez revisiones y `alembic_version`.
+una **base nueva y vacía**: incluye las once revisiones y `alembic_version`.
 No ejecutar ese script sobre un esquema ya existente; para actualizar una
 instalación existente se utiliza Alembic desde su revisión actual, previa
 autorización y copia de seguridad. No ejecutar el SQL y Alembic como dos
@@ -187,15 +187,30 @@ copias de fotografías. Las revisiones históricas se conservan sin añadir
 revisiones en este flujo. El historial es consultable por quienes pueden
 consultar la ubicación; el trigger existente impide modificarlo o borrarlo.
 Al actualizar GPS se borra la URL vigente anterior, que permanece en su
-revisión histórica si procedía de ella. El método vigente queda desconocido
-en este flujo de actualización, que no transmite la procedencia; la revisión
-inicial conserva su método y su enlace.
+revisión histórica si procedía de ella. Las nuevas capturas registran método,
+coordenadas, precisión, fecha de medición y responsable; el historial conserva
+los datos de la actualización. Las anteriores siguen con calidad desconocida.
 
 El registro inicial exige seleccionar `GPS_DISPOSITIVO` o
 `ENLACE_COMPARTIDO`, confirmar las coordenadas y adjuntar una fotografía válida.
 La API exige ahora `metodo_coordenadas` y `coordenadas_confirmadas: true`;
 los clientes anteriores deben actualizarse antes de registrar nuevas
 ubicaciones. El backend y el frontend deben desplegarse coordinadamente.
+Para GPS se requieren `precision_metros` y `capturado_en`, y se rechazan
+mediciones superiores al límite aceptable. Para enlaces estos campos son nulos:
+la fecha original y la precisión del dispositivo que compartió el enlace no se
+conocen. La revisión inicial conserva `fecha_evento` como fecha de medición GPS,
+además de `registrado_en`; los reintentos de operaciones antiguas ya preparadas
+conservan precisión desconocida. La migración `0011` agrega columnas anulables
+sin rellenar ni modificar datos históricos.
+
+Los límites `GPS_LIMITE_EXCELENTE`, `GPS_LIMITE_BUENA`,
+`GPS_LIMITE_ACEPTABLE` y `GPS_LIMITE_BAJA` se configuran en metros en el
+backend; por defecto son 5, 10, 20 y 50, respectivamente. Deben ser positivos
+y estrictamente crecientes. La API los entrega al frontend en
+`GET /configuracion-gps`. Son criterios orientativos: la precisión y hora son
+declaraciones del dispositivo, no pruebas independientes. Cambiar límites puede
+hacer que una captura en curso sea rechazada; en ese caso se debe repetir.
 La procedencia es una declaración del usuario, no una prueba criptográfica de
 presencia. El servidor interpreta enlaces HTTPS de Google Maps con coordenadas
 puntuales y marcadores `mlat`/`mlon` de OpenStreetMap. Los enlaces cortos de

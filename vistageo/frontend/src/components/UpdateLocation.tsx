@@ -8,6 +8,8 @@ import { encodeOfficialPhoto } from '../services/officialPhoto'
 import type { Location, UpdateReason } from '../types/api'
 import { Button } from './Button'
 import { CameraInput } from './CameraInput'
+import { GpsCapture } from './GpsCapture'
+import type { GpsPosition } from '../services/gpsCapture'
 
 type Props = {
   userId: number
@@ -29,7 +31,8 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
   const [reasonId, setReasonId] = useState('')
   const [observation, setObservation] = useState('')
   const [photo, setPhoto] = useState('')
-  const [position, setPosition] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null)
+  const [position, setPosition] = useState<GpsPosition | null>(null)
+  const [capturingGps, setCapturingGps] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -54,17 +57,6 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
     } finally {
       setBusy(false)
     }
-  }
-
-  const locate = () => {
-    setError('')
-    if (!navigator.geolocation) { setError('Este dispositivo no dispone de GPS.'); return }
-    setBusy(true)
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => { setPosition({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }); setBusy(false) },
-      (err) => { setError(err.code === err.PERMISSION_DENIED ? 'Permite el acceso a la ubicación para continuar.' : 'No se pudo obtener el GPS. Inténtalo nuevamente.'); setBusy(false) },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-    )
   }
 
   const capture = async (file: File) => {
@@ -96,10 +88,11 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
         setEditing(false)
         setPhoto('')
         setPosition(null)
+        setCapturingGps(false)
         setMessage('Ubicación actualizada correctamente.')
       }
     } catch (err) {
-      if (err instanceof Error && 'status' in err && err.status === 412 && !value.body.fotografia_base64) setCanDiscard(true)
+      if (err instanceof Error && 'status' in err && (err.status === 412 || err.status === 422) && !value.body.fotografia_base64) setCanDiscard(true)
       setError(err instanceof Error ? `${err.message}. Conserva el borrador y reintenta.` : 'No se pudo actualizar; conserva el borrador.')
     } finally {
       setBusy(false)
@@ -126,13 +119,16 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
   }
 
   const confirm = async () => {
-    if (!reasonId || (!photo && !position && !legacy)) return
+    if (!reasonId || (!photo && !position && !legacy) || (position && !position.acceptable)) return
     if ((photo || legacy) && !window.confirm('La foto anterior se eliminará de Storage. ¿Confirmas el reemplazo?')) return
     const body: LocationUpdateBody = {
       idempotencia: legacy?.idempotencia ?? crypto.randomUUID(), version: location.version,
       motivo_id: Number(reasonId), observacion: observation.trim() || null,
     }
-    if (position) { body.latitud = String(position.latitude); body.longitud = String(position.longitude) }
+    if (position) {
+      body.latitud = String(position.latitude); body.longitud = String(position.longitude)
+      body.precision_metros = position.accuracy; body.capturado_en = position.capturedAt
+    }
     if (legacy) { body.fotografia_base64 = legacy.fotografia_base64; body.foto_version = legacy.version }
     else if (photo && photoVersion) { body.fotografia_base64 = photo; body.foto_version = photoVersion }
     if (!body.fotografia_base64 && !body.latitud) return
@@ -173,8 +169,9 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
       {!legacy && canPhoto && photoVersion && <><p className="text-sm text-slate-600">Selecciona una nueva fachada si deseas reemplazarla.</p>
         <CameraInput allowGallery disabled={busy} onPhoto={(file) => void capture(file)} />
         {photo && <img className="max-h-48 rounded-xl" src={`data:image/jpeg;base64,${photo}`} alt="Vista previa de nueva fachada" />}</>}
-      {canGps && <div><Button type="button" variant="secondary" disabled={busy} onClick={locate}>Capturar nueva ubicación GPS</Button>
-        {position && <p className="mt-2 text-sm text-slate-600">{position.latitude}, {position.longitude} · precisión aproximada {Math.round(position.accuracy)} m</p>}</div>}
+      {canGps && (capturingGps
+        ? <GpsCapture disabled={busy} onChange={setPosition} />
+        : <Button type="button" variant="secondary" disabled={busy} onClick={() => setCapturingGps(true)}>Capturar nueva ubicación GPS</Button>)}
       <label className="block text-sm font-medium text-slate-700">Motivo de actualización
         <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-300 bg-white p-3" required>
           <option value="">Selecciona un motivo</option>{reasons.map((reason) => <option key={reason.id} value={reason.id}>{reason.nombre}</option>)}
@@ -184,8 +181,8 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
       <label className="block text-sm font-medium text-slate-700">Observación opcional
         <textarea value={observation} maxLength={2000} onChange={(event) => setObservation(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-300 p-3" />
       </label>
-      <div className="flex flex-wrap gap-2"><Button type="button" disabled={busy || !reasonId || (!photo && !position && !legacy)} onClick={() => void confirm()}>Guardar actualización</Button>
-        <Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(false); setPhoto(''); setPosition(null); setError('') }}>Cancelar</Button></div>
+      <div className="flex flex-wrap gap-2"><Button type="button" disabled={busy || !reasonId || (!photo && !position && !legacy) || (!!position && !position.acceptable)} onClick={() => void confirm()}>Guardar actualización</Button>
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(false); setPhoto(''); setPosition(null); setCapturingGps(false); setError('') }}>Cancelar</Button></div>
     </> : <Button type="button" variant="secondary" disabled={busy || (!canGps && (!canPhoto || !photoVersion))} onClick={() => void open()}>Actualizar fachada o GPS</Button>}
   </section>
 }

@@ -22,6 +22,7 @@ from app.actualizacion_ubicacion import update_location
 from app.fotografia import photo_version, recovery_loop, replace_photo
 from app.registro_ubicacion import register_location
 from app.enlaces_gps import resolve_map_url
+from app.calidad_gps import gps_limits
 from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, OFFICIAL_ROLES, PERMISSIONS, PERMISSION_MANAGERS, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, token_hash, verify_password
 from app.storage import BUCKET, Storage
 
@@ -389,6 +390,11 @@ def interpret_shared_location(data: SharedLocationRequest, actor: User = Depends
     return SharedLocationRead(latitud=latitude, longitud=longitude)
 
 
+@app.get("/configuracion-gps")
+def read_gps_configuration(_actor: User = Depends(current_user)) -> dict[str, float]:
+    return gps_limits()
+
+
 @app.get("/motivos-actualizacion", response_model=list[UpdateReasonRead])
 def list_update_reasons(
     todos: bool = False, actor: User = Depends(current_user), db: Session = Depends(get_db),
@@ -571,6 +577,10 @@ def list_location_updates(
         "kardex": event.detalles["kardex"], "motivo": event.detalles["motivo"],
         "observacion": event.detalles["observacion"], "fachada": event.detalles["fachada"],
         "gps": event.detalles["gps"],
+        "latitud": event.detalles.get("latitud"), "longitud": event.detalles.get("longitud"),
+        "precision_metros": event.detalles.get("precision_metros"),
+        "capturado_en": event.detalles.get("capturado_en"),
+        "metodo_coordenadas": event.detalles.get("metodo_coordenadas"),
     } for event, username in rows]
 
 

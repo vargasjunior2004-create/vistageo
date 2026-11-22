@@ -11,7 +11,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.enlaces_gps import resolve_map_url
-from app.models import AuditRecord, Contract, Location, LocationRevision, PhotoOperation, Photograph, User, now_utc
+from app.calidad_gps import validate_gps_measurement
+from app.models import AuditRecord, Contract, Location, LocationRevision, PhotoOperation, Photograph, User, as_utc, now_utc
 from app.schemas import FieldLocationCreate
 from app.storage import BUCKET, Storage
 
@@ -43,6 +44,8 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
     key = f"registros/v1/{data.idempotencia}/{digest}.webp"
     operation = db.scalar(select(PhotoOperation).where(PhotoOperation.idempotencia == data.idempotencia).with_for_update())
     if operation is None:
+        if data.metodo_coordenadas == "GPS_DISPOSITIVO":
+            validate_gps_measurement(data.precision_metros, data.capturado_en)
         validate_shared_coordinates(data)
         if db.scalar(select(Location.id).where(Location.kardex == data.kardex)) is not None:
             raise HTTPException(status_code=409, detail="El kardex ya tiene una ubicación")
@@ -57,7 +60,7 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
             revision = LocationRevision(
                 ubicacion_id=location.id, latitud=data.latitud, longitud=data.longitud,
                 responsable_id=actor.id, cerrada=True, metodo_coordenadas=data.metodo_coordenadas,
-                url_gps=data.url_gps,
+                url_gps=data.url_gps, precision_metros=data.precision_metros, fecha_evento=data.capturado_en,
             )
             db.add(revision)
             db.flush()
@@ -83,6 +86,8 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
         raise HTTPException(status_code=409, detail="La operación no coincide con el registro original")
     if revision.metodo_coordenadas is not None and (
         revision.metodo_coordenadas != data.metodo_coordenadas or revision.url_gps != data.url_gps
+        or revision.precision_metros != data.precision_metros
+        or (as_utc(revision.fecha_evento) if revision.fecha_evento else None) != data.capturado_en
     ):
         raise HTTPException(status_code=409, detail="La operación no coincide con el registro original")
     if operation.estado == "finalizada":
@@ -94,7 +99,7 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
         revision = LocationRevision(
             ubicacion_id=location.id, latitud=data.latitud, longitud=data.longitud,
             responsable_id=actor.id, cerrada=True, metodo_coordenadas=data.metodo_coordenadas,
-            url_gps=data.url_gps,
+            url_gps=data.url_gps, precision_metros=data.precision_metros, fecha_evento=data.capturado_en,
         )
         db.add(revision)
         db.commit()
@@ -137,6 +142,9 @@ def register_location(data: FieldLocationCreate, actor: User, db: Session, stora
     location.longitud = revision.longitud
     location.url_gps = revision.url_gps
     location.metodo_coordenadas = revision.metodo_coordenadas
+    location.precision_metros = revision.precision_metros
+    location.capturado_en = revision.fecha_evento
+    location.capturado_por = revision.responsable_id
     operation.fotografia_id = photo.id
     operation.estado = "finalizada"
     operation.intentos += 1

@@ -481,6 +481,7 @@ def test_registro_campo_en_postgresql_preserva_auditoria_y_reintentos(db):
     data = FieldLocationCreate(
         kardex="campo Ab-1 ", idempotencia=uuid4(), latitud="-16.5", longitud="-68.1",
         fotografia_base64=base64.b64encode(image.getvalue()).decode(), metodo_coordenadas="GPS_DISPOSITIVO", coordenadas_confirmadas=True,
+        precision_metros=8.25, capturado_en="2026-01-01T12:00:00Z",
     )
 
     class FakeStorage:
@@ -606,7 +607,7 @@ def test_api_usuarios_y_roles_en_postgresql(db, monkeypatch):
             assert client.post(url, headers=headers, json={"latitud": -16.5, "longitud": -68.1}).status_code == 410
             reason = client.post("/motivos-actualizacion", headers=headers, json={"nombre": "Corrección"}).json()
             body = {"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
-                    "latitud": -16.5, "longitud": -68.1}
+                    "latitud": -16.5, "longitud": -68.1, "precision_metros": 8.25, "capturado_en": "2026-01-01T12:00:00Z"}
             update_path = f"/ubicaciones/{location_id}/actualizacion"
             assert client.put(update_path, headers=headers, json=body).status_code == 200
             assert client.put(update_path, headers=headers, json=body).status_code == 200
@@ -623,6 +624,7 @@ def test_api_usuarios_y_roles_en_postgresql(db, monkeypatch):
             Image.new("RGB", (10, 10), "green").save(image, format="JPEG")
             both = {"idempotencia": str(uuid4()), "version": 1, "motivo_id": reason["id"],
                     "latitud": -15, "longitud": -67, "foto_version": photo_version,
+                    "precision_metros": 8.25, "capturado_en": "2026-01-01T12:00:00Z",
                     "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
             assert client.put(update_path, headers=headers, json=both).json() == {"estado": "finalizada"}
             assert client.put(update_path, headers=headers, json=both).json() == {"estado": "finalizada"}

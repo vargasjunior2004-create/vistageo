@@ -13,6 +13,8 @@ export type LocationDraft = {
   metodo_coordenadas?: 'GPS_DISPOSITIVO' | 'ENLACE_COMPARTIDO'
   coordenadas_confirmadas?: true
   url_gps?: string | null
+  precision_metros?: number | null
+  capturado_en?: string | null
 }
 
 export type PhotoReplacementDraft = {
@@ -28,6 +30,8 @@ export type LocationUpdateBody = {
   observacion: string | null
   latitud?: string
   longitud?: string
+  precision_metros?: number
+  capturado_en?: string
   fotografia_base64?: string
   foto_version?: string
 }

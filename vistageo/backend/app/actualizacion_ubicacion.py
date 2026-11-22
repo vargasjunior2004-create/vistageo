@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.calidad_gps import validate_gps_measurement
 from app.fotografia import replace_photo
 from app.models import AuditRecord, Location, PhotoOperation, UpdateReason, User, now_utc
 from app.schemas import LocationUpdate, PhotographReplace
@@ -13,7 +14,8 @@ from app.storage import Storage
 def update_location(
     location_id: int, data: LocationUpdate, actor: User, db: Session, storage: Storage | None,
 ) -> str:
-    request_hash = hashlib.sha256(data.model_dump_json().encode()).hexdigest()
+    added_fields = {"precision_metros", "capturado_en"} - data.model_fields_set
+    request_hash = hashlib.sha256(data.model_dump_json(exclude=added_fields).encode()).hexdigest()
 
     def previous() -> AuditRecord | None:
         event = db.scalar(select(AuditRecord).where(AuditRecord.operacion_id == data.idempotencia))
@@ -39,7 +41,10 @@ def update_location(
             location.latitud = data.latitud
             location.longitud = data.longitud
             location.url_gps = None
-            location.metodo_coordenadas = None
+            location.metodo_coordenadas = "GPS_DISPOSITIVO" if data.precision_metros is not None else None
+            location.precision_metros = data.precision_metros
+            location.capturado_en = data.capturado_en
+            location.capturado_por = actor.id
         location.version += 1
         db.add(AuditRecord(
             usuario_id=actor.id, ubicacion_id=location.id, accion="ACTUALIZAR_DATOS_UBICACION",
@@ -48,13 +53,24 @@ def update_location(
                 "kardex": location.kardex, "motivo": reason.nombre,
                 "observacion": data.observacion, "fachada": data.fotografia_base64 is not None,
                 "gps": data.latitud is not None, "solicitud_sha256": request_hash,
+                "latitud": str(data.latitud) if data.latitud is not None else None,
+                "longitud": str(data.longitud) if data.longitud is not None else None,
+                "precision_metros": data.precision_metros,
+                "capturado_en": data.capturado_en.isoformat() if data.capturado_en else None,
+                "metodo_coordenadas": location.metodo_coordenadas if data.latitud is not None else None,
             },
         ))
 
     if data.fotografia_base64 is not None:
         if storage is None or data.foto_version is None:
             raise RuntimeError("Storage o versión de fotografía no disponibles")
-        previous()
+        prior = previous()
+        pending = db.scalar(select(PhotoOperation).where(PhotoOperation.idempotencia == data.idempotencia))
+        if data.latitud is not None and prior is None and not (
+            pending is not None and pending.usuario_id == actor.id and pending.ubicacion_id == location_id
+            and pending.solicitud_sha256 == request_hash
+        ):
+            validate_gps_measurement(data.precision_metros, data.capturado_en)
         return replace_photo(
             location_id,
             PhotographReplace(idempotencia=data.idempotencia, version=data.foto_version, fotografia_base64=data.fotografia_base64),
@@ -66,6 +82,8 @@ def update_location(
         raise HTTPException(status_code=404, detail="Ubicación no encontrada")
     if previous() is not None:
         return "finalizada"
+    if data.latitud is not None:
+        validate_gps_measurement(data.precision_metros, data.capturado_en)
     if db.scalar(select(PhotoOperation.id).where(PhotoOperation.idempotencia == data.idempotencia)) is not None:
         raise HTTPException(status_code=409, detail="La operación no coincide con la solicitud original")
     if db.scalar(select(PhotoOperation.id).where(
