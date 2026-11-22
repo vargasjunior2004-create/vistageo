@@ -20,7 +20,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       const user = await login(username, password)
-      navigate(user.must_change_password ? '/cambiar-contrasena' : '/')
+      navigate(user.must_change_password ? '/cambiar-contraseña' : '/')
     } catch (err) {
       setError((err as Error).message || 'Credenciales inválidas')
     } finally {
@@ -36,7 +36,7 @@ export function LoginPage() {
             <Icon name="locations" className="h-8 w-8" />
           </span>
           <h1 className="font-display mt-4 text-3xl font-bold tracking-tight text-[#102c50]">VISTA GEO</h1>
-          <p className="mt-1 text-sm text-slate-500">Acceso al panel técnico</p>
+          <p className="mt-1 text-sm text-slate-500">Accede a las ubicaciones de tus clientes</p>
         </div>
         <form onSubmit={submit} className="space-y-5 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
           <Input
