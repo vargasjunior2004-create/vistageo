@@ -19,6 +19,8 @@ from app.models import AuditEvent, AuditRecord, AuthSession, Contract, Historica
 from app.security import PERMISSIONS, password_hash
 from app.unified import create_unified_app
 
+GPS_SAMPLE = {"precision_metros": 8.25, "capturado_en": "2026-01-01T12:00:00Z"}
+
 
 @pytest.fixture
 def api():
@@ -127,7 +129,9 @@ def test_actualizacion_con_motivo_permisos_reintento_y_auditoria(api, monkeypatc
         db.commit()
     path = f"/ubicaciones/{location_id}/actualizacion"
     body = {"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
-            "latitud": "-16", "longitud": "-68", "observacion": "Nueva calle"}
+            "latitud": "-16", "longitud": "-68", "observacion": "Nueva calle", **GPS_SAMPLE}
+    assert client.put(path, headers=tech, json={**body, "precision_metros": 20.01}).status_code == 422
+    assert client.put(path, headers=tech, json={**body, "precision_metros": None}).status_code == 422
     assert client.put(path, headers=tech, json={**body, "motivo_id": 999}).status_code == 409
     assert client.put(path, headers=tech, json=body).json() == {"estado": "finalizada"}
     assert client.put(path, headers=tech, json=body).json() == {"estado": "finalizada"}
@@ -135,11 +139,13 @@ def test_actualizacion_con_motivo_permisos_reintento_y_auditoria(api, monkeypatc
     assert client.put(path, headers=tech, json={**body, "idempotencia": str(uuid4())}).status_code == 412
     result = client.get(f"/ubicaciones/{location_id}", headers=tech).json()
     assert result["latitud"] == "-16.0000000000" and result["url_gps"] is None and result["version"] == 1
+    assert result["precision_metros"] == GPS_SAMPLE["precision_metros"]
+    assert result["metodo_coordenadas"] == "GPS_DISPOSITIVO" and result["capturado_por"] is not None
     image = io.BytesIO()
     Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
     photo_version = client.get(f"/ubicaciones/{location_id}/fotografia", headers=tech).headers["x-foto-version"]
     both = {"idempotencia": str(uuid4()), "version": 1, "motivo_id": reason["id"],
-            "latitud": "3", "longitud": "4", "foto_version": photo_version,
+            "latitud": "3", "longitud": "4", "foto_version": photo_version, **GPS_SAMPLE,
             "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
     assert client.put(path, headers=tech, json=both).status_code == 403
     assert client.put(path, headers=admin, json=both).json() == {"estado": "finalizada"}
@@ -150,6 +156,7 @@ def test_actualizacion_con_motivo_permisos_reintento_y_auditoria(api, monkeypatc
     history = client.get(f"/ubicaciones/{location_id}/actualizaciones", headers=tech).json()
     assert len(history) == 2 and all(row["motivo"] == "Traslado" for row in history)
     assert any(row["fachada"] and row["gps"] for row in history)
+    assert all(row["precision_metros"] == GPS_SAMPLE["precision_metros"] for row in history)
     assert client.put(path, headers=tech, json={**body, "idempotencia": str(uuid4()), "version": 2}).status_code == 409
     with factory() as db:
         loc = db.get(Location, location_id)
@@ -186,7 +193,7 @@ def test_fallo_auditoria_no_publica_foto_ni_gps_y_permite_reintentar(api, monkey
     Image.new("RGB", (10, 10), "green").save(image, format="JPEG")
     photo_path = f"/ubicaciones/{location_id}/fotografia"
     body = {"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
-            "latitud": 3, "longitud": 4,
+            "latitud": 3, "longitud": 4, **GPS_SAMPLE,
             "foto_version": client.get(photo_path, headers=auth).headers["x-foto-version"],
             "fotografia_base64": base64.b64encode(image.getvalue()).decode()}
 
@@ -206,6 +213,8 @@ def test_fallo_auditoria_no_publica_foto_ni_gps_y_permite_reintentar(api, monkey
         assert db.scalar(select(Photograph)).storage_clave == "anterior.webp"
         assert db.scalar(select(PhotoOperation)).estado == "preparada"
         assert db.scalar(select(AuditRecord).where(AuditRecord.accion == "ACTUALIZAR_DATOS_UBICACION")) is None
+    monkeypatch.setenv("GPS_LIMITE_BUENA", "6")
+    monkeypatch.setenv("GPS_LIMITE_ACEPTABLE", "7")
     assert client.put(f"/ubicaciones/{location_id}/actualizacion", headers=auth, json=body).json() == {"estado": "finalizada"}
     assert "anterior.webp" not in objects
 
@@ -619,9 +628,15 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     image = io.BytesIO()
     Image.new("RGB", (20, 10), "blue").save(image, format="JPEG")
     body = {"idempotencia": str(uuid4()), "kardex": "aB-1 ", "latitud": "-16.5", "longitud": "-68.1",
-            "fotografia_base64": base64.b64encode(image.getvalue()).decode(), "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True}
+            "fotografia_base64": base64.b64encode(image.getvalue()).decode(), "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True, **GPS_SAMPLE}
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "creado_por": 1}).status_code == 422
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "creado_en": "2000-01-01T00:00:00Z"}).status_code == 422
+    assert client.get("/configuracion-gps", headers=auth).json() == {
+        "excelente": 5, "buena": 10, "aceptable": 20, "baja": 50,
+    }
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "precision_metros": 20.01}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "precision_metros": None}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "capturado_en": None}).status_code == 422
     start = datetime.now(timezone.utc)
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 503
     with factory() as db:
@@ -644,15 +659,18 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     assert response.status_code == 201
     assert response.json()["kardex"] == "aB-1 "
     assert response.json()["metodo_coordenadas"] == "GPS_DISPOSITIVO"
+    assert response.json()["precision_metros"] == GPS_SAMPLE["precision_metros"]
     assert response.json()["creado_por_nombre"] == "TECH"
     assert start <= as_utc(datetime.fromisoformat(response.json()["creado_en"])) <= datetime.now(timezone.utc)
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 201
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "precision_metros": 9}).status_code == 409
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "idempotencia": str(uuid4())}).status_code == 409
     with factory() as db:
         photo = db.scalar(select(Photograph))
         revision = db.get(LocationRevision, response.json()["revision_actual_id"])
         assert photo.registrado_por == revision.responsable_id
         assert revision.metodo_coordenadas == "GPS_DISPOSITIVO" and revision.url_gps is None
+        assert revision.precision_metros == GPS_SAMPLE["precision_metros"] and revision.fecha_evento is not None
         assert db.get(Location, response.json()["id"]).creado_por == revision.responsable_id
         assert len(db.scalars(select(Photograph)).all()) == 1
         assert db.scalar(select(PhotoOperation)).estado == "finalizada"
@@ -666,7 +684,7 @@ def test_field_registration_retry_is_idempotent_and_keeps_exact_kardex(api, monk
     reason = client.post("/motivos-actualizacion", headers=admin, json={"nombre": "Cambio"}).json()
     assert client.put(f"/ubicaciones/{response.json()['id']}/actualizacion", headers=admin,
                       json={"idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"],
-                            "latitud": 1, "longitud": 2}).status_code == 200
+                            "latitud": 1, "longitud": 2, **GPS_SAMPLE}).status_code == 200
     updated = client.get(f"/ubicaciones/{response.json()['id']}", headers=auth).json()
     assert updated["creado_por_nombre"] == "TECH" and updated["creado_en"] == result["creado_en"]
 
@@ -691,6 +709,36 @@ def test_field_registration_checks_permissions_and_invalid_photo_before_writes(a
     assert client.get("/ubicaciones", headers=auth, params={"kardex": "nuevo"}).status_code == 200
     with factory() as db:
         assert db.scalar(select(Contract)) is None
+
+
+def test_gps_quality_limits_are_configurable_and_enforced(api, monkeypatch):
+    client, factory = api
+    objects = {}
+
+    class FakeStorage:
+        def get(self, key):
+            return objects.get(key)
+
+        def put(self, key, content):
+            objects[key] = content
+
+    monkeypatch.setattr("app.main.Storage", FakeStorage)
+    monkeypatch.setenv("GPS_LIMITE_ACEPTABLE", "15")
+    auth = headers(client)
+    assert client.get("/configuracion-gps", headers=auth).json()["aceptable"] == 15
+    image = io.BytesIO()
+    Image.new("RGB", (10, 10), "blue").save(image, format="JPEG")
+    body = {
+        "idempotencia": str(uuid4()), "kardex": "CALIDAD", "latitud": 1, "longitud": 2,
+        "fotografia_base64": base64.b64encode(image.getvalue()).decode(),
+        "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True, **GPS_SAMPLE,
+    }
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "precision_metros": 15.0001}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "precision_metros": -1}).status_code == 422
+    result = client.post("/registro-ubicacion", headers=auth, json={**body, "precision_metros": 15})
+    assert result.status_code == 201 and result.json()["precision_metros"] == 15
+    with factory() as db:
+        assert db.scalar(select(LocationRevision)).precision_metros == 15
 
 
 @pytest.mark.parametrize("short", [False, True])
@@ -733,23 +781,26 @@ def test_shared_registration_requires_photo_and_preserves_provenance(api, monkey
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "latitud": "91"}).status_code == 422
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "latitud": "0"}).status_code == 422
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "metodo_coordenadas": "GPS_DISPOSITIVO"}).status_code == 422
+    assert client.post("/registro-ubicacion", headers=auth, json={**body, "precision_metros": 0}).status_code == 422
     result = client.post("/registro-ubicacion", headers=auth, json=body)
     assert result.status_code == 201
     location = result.json()
     assert location["metodo_coordenadas"] == "ENLACE_COMPARTIDO" and location["url_gps"] == url
+    assert location["precision_metros"] is None and location["capturado_en"] is None
     assert client.get(f"/ubicaciones/{location['id']}/fotografia", headers=auth).status_code == 200
     revision = client.get(f"/ubicaciones/{location['id']}/revisiones", headers=auth).json()[0]
     assert revision["metodo_coordenadas"] == "ENLACE_COMPARTIDO" and revision["url_gps"] == url
+    assert revision["precision_metros"] is None and revision["fecha_evento"] is None
     monkeypatch.setattr("app.enlaces_gps.redirect_location", lambda _: pytest.fail("No debe resolverse un reintento"))
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 201
     assert client.post("/registro-ubicacion", headers=auth, json={**body, "url_gps": url + "x"}).status_code == 409
     admin = headers(client)
     reason = client.post("/motivos-actualizacion", headers=admin, json={"nombre": "Traslado"}).json()
     assert client.put(f"/ubicaciones/{location['id']}/actualizacion", headers=admin, json={
-        "idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"], "latitud": 1, "longitud": 2,
+        "idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"], "latitud": 1, "longitud": 2, **GPS_SAMPLE,
     }).status_code == 200
     current = client.get(f"/ubicaciones/{location['id']}", headers=auth).json()
-    assert current["metodo_coordenadas"] is None and current["url_gps"] is None
+    assert current["metodo_coordenadas"] == "GPS_DISPOSITIVO" and current["url_gps"] is None
     assert client.get(f"/ubicaciones/{location['id']}/revisiones", headers=auth).json()[0]["url_gps"] == url
 
 
@@ -776,13 +827,16 @@ def test_legacy_pending_draft_keeps_closed_revision_and_retries(api, monkeypatch
     body = {
         "idempotencia": str(uuid4()), "kardex": "BORRADOR",
         "latitud": 1, "longitud": 2, "metodo_coordenadas": "GPS_DISPOSITIVO",
-        "coordenadas_confirmadas": True, "fotografia_base64": base64.b64encode(image.getvalue()).decode(),
+        "coordenadas_confirmadas": True, "fotografia_base64": base64.b64encode(image.getvalue()).decode(), **GPS_SAMPLE,
     }
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 503
     with factory() as db:
         original = db.scalar(select(LocationRevision))
         original.metodo_coordenadas = None
+        original.precision_metros = None
+        original.fecha_evento = None
         db.commit()
+    body = {key: value for key, value in body.items() if key not in GPS_SAMPLE}
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 503
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == 201
     with factory() as db:
@@ -836,7 +890,7 @@ def test_field_registration_recovers_when_object_already_uploaded(api, monkeypat
     monkeypatch.setattr("app.main.Storage", FakeStorage)
     auth = headers(client, "tech", "testpass3")
     body = {"idempotencia": str(uuid4()), "kardex": "carrera", "latitud": 1, "longitud": 2,
-            "fotografia_base64": encoded, "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True}
+            "fotografia_base64": encoded, "metodo_coordenadas": "GPS_DISPOSITIVO", "coordenadas_confirmadas": True, **GPS_SAMPLE}
     assert client.post("/registro-ubicacion", headers=auth, json=body).status_code == (201 if matching else 503)
     with factory() as db:
         assert db.scalar(select(PhotoOperation)).estado == ("finalizada" if matching else "preparada")
@@ -1135,7 +1189,7 @@ def test_ubicaciones_guardan_historial_y_auditoria(api):
     assert client.post(url, headers=admin, json={"latitud": -16.5, "longitud": -68.1}).status_code == 410
     reason = client.post("/motivos-actualizacion", headers=admin, json={"nombre": "Cambio"}).json()
     assert client.put(f"/ubicaciones/{location_id}/actualizacion", headers=admin, json={
-        "idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"], "latitud": -16.5, "longitud": -68.1,
+        "idempotencia": str(uuid4()), "version": 0, "motivo_id": reason["id"], "latitud": -16.5, "longitud": -68.1, **GPS_SAMPLE,
     }).status_code == 200
     assert client.get(f"/ubicaciones/{location_id}", headers=admin).json()["revision_actual_id"] == first_id
     assert [r["id"] for r in client.get(url, headers=admin).json()] == [first_id]

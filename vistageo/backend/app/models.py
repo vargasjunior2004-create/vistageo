@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
-    JSON, BigInteger, Boolean, CheckConstraint, Column, DateTime, ForeignKey,
+    JSON, BigInteger, Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey,
     ForeignKeyConstraint, Identity, Index, Integer, Numeric, String, Table, Text,
     UniqueConstraint, Uuid, text,
 )
@@ -131,10 +131,13 @@ class Location(Base):
     longitud: Mapped[Decimal | None] = mapped_column(Numeric)
     url_gps: Mapped[str | None] = mapped_column(Text)
     metodo_coordenadas: Mapped[str | None] = mapped_column(String(32))
+    precision_metros: Mapped[float | None] = mapped_column(Float)
+    capturado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    capturado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     creado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
-    creador: Mapped[User | None] = relationship(lazy="selectin")
+    creador: Mapped[User | None] = relationship(lazy="selectin", foreign_keys=[creado_por])
 
     @property
     def creado_por_nombre(self) -> str | None:
@@ -171,6 +174,7 @@ class LocationRevision(Base):
     latitud: Mapped[Decimal | None] = mapped_column(Numeric)
     longitud: Mapped[Decimal | None] = mapped_column(Numeric)
     fecha_evento: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    precision_metros: Mapped[float | None] = mapped_column(Float)
     registrado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"))
     responsable_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
     cerrada: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))

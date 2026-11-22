@@ -227,6 +227,8 @@ export function LocationSearchPage() {
           />}
           {selected.latitud !== null ? <p className="text-sm text-slate-600">{selected.latitud}, {selected.longitud}</p> : <p className="text-sm text-slate-600">No hay coordenadas vigentes.</p>}
           <p className="text-sm text-slate-600">Origen de las coordenadas vigentes: {selected.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : selected.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
+          <p className="text-sm text-slate-600">Precisión estimada: {selected.precision_metros === null ? 'No disponible' : `${selected.precision_metros} m`}</p>
+          {selected.capturado_en && <p className="text-sm text-slate-600">Medición del dispositivo: {new Date(selected.capturado_en).toLocaleString()}</p>}
           {selected.url_gps && <p className="break-all text-sm text-slate-600">URL GPS: {selected.url_gps}</p>}
           {link && <><p className="break-all text-sm text-slate-600">Enlace: {link}</p><a className="inline-block rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a></>}
           <section className="space-y-2 border-t border-slate-100 pt-4">
@@ -236,6 +238,7 @@ export function LocationSearchPage() {
               <p className="font-semibold">Revisión histórica vinculada</p>
               <p>Origen: {registrationRevision.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : registrationRevision.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
               <p>{registrationRevision.latitud ?? '—'}, {registrationRevision.longitud ?? '—'} · {new Date(registrationRevision.registrado_en).toLocaleString()}</p>
+              <p>Precisión estimada: {registrationRevision.precision_metros === null ? 'No disponible' : `${registrationRevision.precision_metros} m`}</p>
               {registrationRevision.url_gps && <p className="break-all">Enlace original: {registrationRevision.url_gps}</p>}
             </div>}
             {historyError && <p role="alert" className="text-sm text-red-700">{historyError}</p>}
@@ -245,6 +248,8 @@ export function LocationSearchPage() {
               <p className="font-semibold">{item.motivo}</p>
               <p>{item.usuario} · {new Date(item.fecha).toLocaleString()}</p>
               <p>{[item.fachada && 'Fachada', item.gps && 'GPS'].filter(Boolean).join(' y ')}</p>
+              {item.gps && <p>{item.latitud ?? '—'}, {item.longitud ?? '—'} · Precisión estimada: {item.precision_metros === null ? 'No disponible' : `${item.precision_metros} m`}</p>}
+              {item.capturado_en && <p>Medición del dispositivo: {new Date(item.capturado_en).toLocaleString()}</p>}
               {item.observacion && <p className="whitespace-pre-wrap">{item.observacion}</p>}
             </li>)}</ul>
             {historyMore && <Button type="button" variant="secondary" disabled={historyLoading} onClick={() => void moreHistory()}>Ver más</Button>}

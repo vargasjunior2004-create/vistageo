@@ -756,5 +756,19 @@ ALTER TABLE revisiones_ubicacion ADD CONSTRAINT revisiones_metodo_contenido CHEC
 
 UPDATE alembic_version SET version_num='0010_coordinate_methods' WHERE alembic_version.version_num = '0009_current_location_updates';
 
+-- Running upgrade 0010_coordinate_methods -> 0011_gps_quality
+
+ALTER TABLE ubicaciones ADD COLUMN precision_metros FLOAT;
+
+ALTER TABLE ubicaciones ADD COLUMN capturado_en TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE ubicaciones ADD COLUMN capturado_por BIGINT;
+
+ALTER TABLE ubicaciones ADD CONSTRAINT ubicaciones_capturado_por_fk FOREIGN KEY(capturado_por) REFERENCES usuarios (id) ON DELETE RESTRICT;
+
+ALTER TABLE revisiones_ubicacion ADD COLUMN precision_metros FLOAT;
+
+UPDATE alembic_version SET version_num='0011_gps_quality' WHERE alembic_version.version_num = '0010_coordinate_methods';
+
 COMMIT;
 

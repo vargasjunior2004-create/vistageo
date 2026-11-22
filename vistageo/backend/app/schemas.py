@@ -152,6 +152,8 @@ class FieldLocationCreate(ContractCreate):
     metodo_coordenadas: Literal["GPS_DISPOSITIVO", "ENLACE_COMPARTIDO"]
     coordenadas_confirmadas: StrictBool
     url_gps: str | None = Field(default=None, min_length=1, max_length=4096)
+    precision_metros: float | None = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    capturado_en: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def valid_method(self) -> Self:
@@ -159,6 +161,8 @@ class FieldLocationCreate(ContractCreate):
             raise ValueError("Confirma la ubicación antes de guardar")
         if (self.metodo_coordenadas == "ENLACE_COMPARTIDO") != (self.url_gps is not None):
             raise ValueError("El enlace solo corresponde al método de ubicación compartida")
+        if self.metodo_coordenadas == "ENLACE_COMPARTIDO" and (self.precision_metros is not None or self.capturado_en is not None):
+            raise ValueError("El enlace no proporciona precisión ni fecha de captura")
         return self
 
 
@@ -209,6 +213,8 @@ class LocationUpdate(RequestModel):
     longitud: Decimal | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
     fotografia_base64: str | None = Field(default=None, min_length=1, max_length=12 * 1024 * 1024)
     foto_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    precision_metros: float | None = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    capturado_en: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def valid_changes(self) -> Self:
@@ -218,6 +224,8 @@ class LocationUpdate(RequestModel):
             raise ValueError("La fotografía requiere su versión")
         if self.latitud is None and self.fotografia_base64 is None:
             raise ValueError("Selecciona una fotografía o coordenadas")
+        if self.latitud is None and (self.precision_metros is not None or self.capturado_en is not None):
+            raise ValueError("La precisión y fecha requieren coordenadas")
         if self.observacion is not None and "\x00" in self.observacion:
             raise ValueError("Observación inválida")
         return self
@@ -235,6 +243,9 @@ class LocationRead(BaseModel):
     longitud: Decimal | None = None
     url_gps: str | None = None
     metodo_coordenadas: str | None = None
+    precision_metros: float | None = None
+    capturado_en: datetime | None = None
+    capturado_por: int | None = None
     version: int = 0
 
 
@@ -276,6 +287,7 @@ class LocationRevisionRead(BaseModel):
     latitud: Decimal | None
     longitud: Decimal | None
     fecha_evento: datetime | None
+    precision_metros: float | None
     registrado_en: datetime
     responsable_id: int | None
     cerrada: bool

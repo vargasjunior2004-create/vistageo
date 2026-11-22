@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { CameraInput } from '../components/CameraInput'
 import { Input } from '../components/Input'
+import { GpsCapture } from '../components/GpsCapture'
 import { deleteDraft, getDraft, saveDraft, type LocationDraft } from '../services/localPhotos'
 import { encodeOfficialPhoto } from '../services/officialPhoto'
 import { googleMapsLink } from '../services/maps'
@@ -20,7 +21,7 @@ export function FieldLocationPage() {
   const [retryCheck, setRetryCheck] = useState(0)
   const checkController = useRef<AbortController | null>(null)
   const [photo, setPhoto] = useState('')
-  const [position, setPosition] = useState<{ latitude: number; longitude: number; accuracy: number; rawLatitude?: string; rawLongitude?: string } | null>(null)
+  const [position, setPosition] = useState<{ latitude: number; longitude: number; accuracy: number | null; capturedAt: string | null; acceptable: boolean; rawLatitude?: string; rawLongitude?: string } | null>(null)
   const [method, setMethod] = useState<'GPS_DISPOSITIVO' | 'ENLACE_COMPARTIDO' | ''>('')
   const [sharedUrl, setSharedUrl] = useState('')
   const [confirmed, setConfirmed] = useState(false)
@@ -71,28 +72,6 @@ export function FieldLocationPage() {
     }
   }
 
-  const locate = () => {
-    setError('')
-    setPosition(null)
-    setConfirmed(false)
-    if (!navigator.geolocation) {
-      setError('Este dispositivo no dispone de ubicación GPS.')
-      return
-    }
-    setBusy(true)
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setPosition({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy })
-        setBusy(false)
-      },
-      (err) => {
-        setError(err.code === err.PERMISSION_DENIED ? 'Permite el acceso a la ubicación para continuar.' : 'No se pudo obtener el GPS. Inténtalo nuevamente.')
-        setBusy(false)
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-    )
-  }
-
   const interpret = async () => {
     setPosition(null)
     setConfirmed(false)
@@ -102,7 +81,7 @@ export function FieldLocationPage() {
       const result = await apiRequest<{ latitud: string; longitud: string }>('/registro-ubicacion/interpretar-enlace', {
         method: 'POST', body: { url_gps: sharedUrl },
       })
-      setPosition({ latitude: Number(result.latitud), longitude: Number(result.longitud), accuracy: 0, rawLatitude: result.latitud, rawLongitude: result.longitud })
+      setPosition({ latitude: Number(result.latitud), longitude: Number(result.longitud), accuracy: null, capturedAt: null, acceptable: true, rawLatitude: result.latitud, rawLongitude: result.longitud })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo interpretar el enlace.')
     } finally {
@@ -131,19 +110,24 @@ export function FieldLocationPage() {
         setError('El registro se completó, pero no se pudo eliminar el borrador local. Puedes reintentarlo sin duplicar la ubicación.')
       }
     } catch (err) {
-      setError(err instanceof Error ? `${err.message}. Conserva el borrador y vuelve a intentar.` : 'No se pudo registrar la ubicación.')
+      if (err instanceof Error && 'status' in err && err.status === 422 && value.metodo_coordenadas === 'GPS_DISPOSITIVO' && value.precision_metros == null) {
+        setError('El borrador anterior no tiene precisión y no se puede crear como un registro nuevo. Si el servidor no lo recibió, descártalo y realiza una nueva captura.')
+      } else {
+        setError(err instanceof Error ? `${err.message}. Conserva el borrador y vuelve a intentar.` : 'No se pudo registrar la ubicación.')
+      }
     } finally {
       setBusy(false)
     }
   }
 
   const register = async () => {
-    if (!user || !position || !photo || !method || !confirmed || checked !== kardex || location) return
+    if (!user || !position || !position.acceptable || !photo || !method || !confirmed || checked !== kardex || location) return
     const value: LocationDraft = {
       idempotencia: crypto.randomUUID(), kardex, latitud: position.rawLatitude ?? String(position.latitude),
       longitud: position.rawLongitude ?? String(position.longitude), fotografia_base64: photo,
       metodo_coordenadas: method, url_gps: method === 'ENLACE_COMPARTIDO' ? sharedUrl : null,
       coordenadas_confirmadas: true,
+      precision_metros: position.accuracy, capturado_en: position.capturedAt,
     }
     try {
       await saveDraft(user.id, value)
@@ -241,21 +225,21 @@ export function FieldLocationPage() {
             <label className={`block cursor-pointer rounded-xl border p-4 ${method === 'GPS_DISPOSITIVO' ? 'border-blue-700 bg-blue-50' : 'border-slate-200'}`}><input type="radio" name="method" disabled={busy} checked={method === 'GPS_DISPOSITIVO'} onChange={() => { setMethod('GPS_DISPOSITIVO'); setPosition(null); setSharedUrl(''); setConfirmed(false) }} /> <strong>Capturar ubicación actual</strong><span className="block pl-5 text-sm text-slate-600">Usa el GPS de este dispositivo en el domicilio.</span></label>
             <label className={`block cursor-pointer rounded-xl border p-4 ${method === 'ENLACE_COMPARTIDO' ? 'border-blue-700 bg-blue-50' : 'border-slate-200'}`}><input type="radio" name="method" disabled={busy} checked={method === 'ENLACE_COMPARTIDO'} onChange={() => { setMethod('ENLACE_COMPARTIDO'); setPosition(null); setConfirmed(false) }} /> <strong>Usar ubicación compartida</strong><span className="block pl-5 text-sm text-slate-600">Pega el enlace recibido del cliente.</span></label>
           </fieldset>
-          {method === 'GPS_DISPOSITIVO' && <Button type="button" variant="secondary" disabled={busy} onClick={locate}>Obtener ubicación actual</Button>}
+          {method === 'GPS_DISPOSITIVO' && <GpsCapture disabled={busy} onChange={(value) => { setPosition(value); setConfirmed(false) }} />}
           {method === 'ENLACE_COMPARTIDO' && <div className="space-y-2"><Input label="Enlace GPS compartido" value={sharedUrl} disabled={busy} onChange={(event) => { setSharedUrl(event.target.value); setPosition(null); setConfirmed(false) }} /><Button type="button" variant="secondary" disabled={busy || !sharedUrl} onClick={() => void interpret()}>Interpretar enlace</Button></div>}
           <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
             <h3 className="font-semibold">Resumen antes de guardar</h3>
             <p className="break-all whitespace-pre-wrap text-sm">Kardex: {kardex}</p>
             {photo ? <img className="max-h-72 rounded-xl" src={`data:image/jpeg;base64,${photo}`} alt="Vista previa de fachada" /> : <p className="text-sm text-slate-600">Añade una foto de fachada.</p>}
             {position ? <>
-              <p className="text-sm text-slate-600">{position.latitude}, {position.longitude}{method === 'GPS_DISPOSITIVO' && ` · Precisión aproximada: ${Math.round(position.accuracy)} m`}</p>
+              <p className="text-sm text-slate-600">{position.latitude}, {position.longitude}{method === 'ENLACE_COMPARTIDO' && ' · Precisión no disponible'}</p>
               <iframe title="Vista previa de ubicación" src={mapUrl} className="h-64 w-full rounded-xl border-0" loading="lazy" referrerPolicy="no-referrer" />
               <p className="text-xs text-slate-500">El mapa de OpenStreetMap recibe estas coordenadas para mostrar la vista previa.</p>
               <a className="block break-all text-sm text-blue-700 underline" href={googleMapsLink(position.latitude, position.longitude)} target="_blank" rel="noopener noreferrer">{googleMapsLink(position.latitude, position.longitude)}</a>
               <label className="block text-sm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> Confirmo que este punto corresponde al domicilio.</label>
             </> : <p className="text-sm text-slate-600">Selecciona un método y obtén las coordenadas.</p>}
           </div>
-          <Button type="button" disabled={busy || !photo || !position || !method || !confirmed} onClick={() => void register()}>Confirmar registro</Button>
+          <Button type="button" disabled={busy || !photo || !position || !position.acceptable || !method || !confirmed} onClick={() => void register()}>Confirmar registro</Button>
         </div>
       )}
     </div>
