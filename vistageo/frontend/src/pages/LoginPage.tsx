@@ -70,6 +70,9 @@ export function LoginPage() {
         <p className="mt-6 text-center text-xs text-slate-600">
           Solicita tus credenciales al administrador del sistema.
         </p>
+        <p>
+          Version 0.1.0 
+        </p>
         {localStorage.getItem('vistageo_jornada_habilitada') === 'true' && (
           <p className="mt-4 text-center text-sm"><Link className="font-semibold text-blue-700" to="/jornada/camara">Abrir fotos de jornada en este dispositivo</Link></p>
         )}
