@@ -55,13 +55,13 @@ export function ContractsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Contratos</h1>
+      <h1 className="page-title">Contratos</h1>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <form onSubmit={(e) => { e.preventDefault(); if (filter === search && offset === 0) void load(undefined, true); else { deliberateLoad.current = true; setOffset(0); setFilter(search) } }} className="flex flex-wrap items-end gap-2">
         <div className="flex-1"><Input label="Buscar kardex exacto" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <Button type="submit">Buscar</Button>
       </form>
-      <form onSubmit={create} className="flex flex-wrap items-end gap-2 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+      <form onSubmit={create} className="surface-panel flex flex-wrap items-end gap-3 p-5">
         <div className="flex-1">
           <Input label="Kardex" value={kardex} onChange={(e) => setKardex(e.target.value)} />
         </div>
@@ -70,14 +70,14 @@ export function ContractsPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div className="overflow-x-auto rounded-3xl bg-white shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+        <div className="surface-panel overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-100 text-left text-slate-600">
+            <thead className="bg-slate-50 text-left text-slate-600">
               <tr><th className="px-4 py-3">Kardex</th></tr>
             </thead>
             <tbody>
               {items.map((c) => (
-                <tr key={c.kardex} className="border-t border-slate-100">
+                <tr key={c.kardex} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium">{c.kardex}</td>
                 </tr>
               ))}

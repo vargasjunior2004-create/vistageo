@@ -95,10 +95,10 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <header className="rounded-3xl bg-[#102c50] p-5 text-white">
-        <p className="text-sm text-blue-200">VISTA GEO · Jornada local</p>
-        <h1 className="mt-1 text-2xl font-bold">{mode === 'camera' ? 'Sacar fotos' : 'Mis fotos'}</h1>
-        <p className="mt-2 text-sm text-blue-100">Estas fotos permanecen en este dispositivo y no se suben al servidor.</p>
+      <header className="space-y-1">
+        <p className="text-sm font-medium text-[#2f6ecb]">Jornada local</p>
+        <h1 className="page-title">{mode === 'camera' ? 'Sacar fotos' : 'Mis fotos'}</h1>
+        <p className="page-description">Estas fotos permanecen en este dispositivo y no se suben al servidor.</p>
       </header>
       <div className="flex flex-wrap gap-3 text-sm font-semibold text-blue-800">
         <Link to="/">Inicio</Link>
@@ -108,7 +108,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
       <p className="text-sm text-slate-600">Cualquier persona con acceso a este navegador puede ver las fotos locales. No borres los datos del sitio.</p>
       {message && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">{message}</p>}
       {mode === 'camera' ? (
-        <div className="space-y-4 rounded-3xl bg-white p-6 shadow-sm">
+        <div className="surface-panel space-y-4 p-5">
           <p>Abre la cámara y guarda las fotos de tu jornada. Puedes repetir la captura.</p>
           <CameraInput disabled={busy} onPhoto={(file) => void capture(file)} />
           {photos[0] && <div className="h-52 overflow-hidden rounded-xl"><PhotoThumbnail photo={photos[0]} /></div>}
@@ -126,7 +126,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
           {!photos.length && <p className="rounded-2xl bg-white p-5 text-slate-600">Todavía no hay fotos. Abre la cámara para empezar.</p>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((photo) => (
-              <div key={photo.id} className="overflow-hidden rounded-2xl bg-white shadow-sm">
+              <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                 <button type="button" onClick={() => setPreview(photo)} className="block h-36 w-full" aria-label="Ampliar foto">
                   <PhotoThumbnail photo={photo} />
                 </button>

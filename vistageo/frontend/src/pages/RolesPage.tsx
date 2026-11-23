@@ -57,7 +57,7 @@ export function RolesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Roles y permisos</h1>
+      <h1 className="page-title">Roles y permisos</h1>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {loading ? (
@@ -65,7 +65,7 @@ export function RolesPage() {
       ) : (
         <div className="space-y-3">
           {roles.map((role) => (
-            <div key={role.id} className="rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+            <div key={role.id} className="surface-panel p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="font-semibold text-slate-900">{role.name}</h2>
@@ -91,7 +91,7 @@ export function RolesPage() {
       )}
 
       {editingPerms && (
-        <div className="rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+        <div className="surface-panel p-5">
           <h2 className="mb-2 font-semibold">Permisos de {editingPerms.name}</h2>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {permissions.map((p) => (

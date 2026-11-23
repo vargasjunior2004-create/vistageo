@@ -101,10 +101,10 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
       >
         <div className={`flex min-h-20 items-center gap-3 border-b border-white/10 px-5 ${collapsed ? 'lg:justify-center lg:px-3' : ''}`}>
           <Link to="/" onClick={() => setOpen(false)} aria-label="VISTA GEO, inicio" className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#2f6ecb] text-white"><Icon name="locations" className="h-6 w-6" /></span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#2f6ecb] text-white"><Icon name="locations" className="h-5 w-5" /></span>
             <span className={`min-w-0 ${collapsed ? 'lg:sr-only' : ''}`}>
-              <span className="block text-base font-bold tracking-[0.08em]">VISTA GEO</span>
-              <span className="block text-[11px] text-blue-200">GRUPO VISTA</span>
+              <span className="block text-base font-semibold tracking-[0.03em]">VISTA GEO</span>
+              <span className="block text-[11px] text-blue-200">Grupo Vista</span>
             </span>
           </Link>
           <button ref={closeButton} type="button" onClick={closeMenu} aria-label="Cerrar menú" className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-blue-100 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white lg:hidden">
@@ -114,7 +114,7 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-6" aria-label="Secciones">
           {groups.filter((group) => group.items.length > 0).map((group) => (
             <div key={group.label}>
-              <p className={`mb-2 px-3 text-[10px] font-bold tracking-[0.13em] text-blue-200/80 uppercase ${collapsed ? 'lg:sr-only' : ''}`}>{group.label}</p>
+              <p className={`mb-2 px-3 text-xs font-medium text-blue-200/80 ${collapsed ? 'lg:sr-only' : ''}`}>{group.label}</p>
               <ul className="space-y-1">
                 {group.items.map((item) => (
                   <li key={item.to}>
@@ -123,7 +123,7 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
                       end={item.to === '/'}
                       onClick={() => setOpen(false)}
                       title={collapsed ? item.label : undefined}
-                      className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${isActive ? 'bg-[#2f6ecb] text-white' : 'text-blue-100 hover:bg-white/10 hover:text-white'}`}
+                      className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-md border-l-2 px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:min-h-9 ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${isActive ? 'border-[#7ba9e8] bg-white/10 text-white' : 'border-transparent text-blue-100 hover:bg-white/5 hover:text-white'}`}
                     >
                       <Icon name={item.icon} className="h-5 w-5 shrink-0" />
                       <span className={collapsed ? 'lg:sr-only' : ''}>{item.label}</span>
@@ -137,7 +137,7 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
         <div className="border-t border-white/10 p-3">
           {user ? <>
             <div className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold">{user.username.slice(0, 2)}</span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-medium">{user.username.slice(0, 2)}</span>
               <span className={`min-w-0 ${collapsed ? 'lg:sr-only' : ''}`}>
                 <span className="block truncate text-sm font-semibold">{user.username}</span>
                 <span className="block truncate text-xs text-blue-200">{user.role_name}</span>
@@ -157,11 +157,11 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
           <button ref={menuButton} type="button" onClick={() => setOpen(true)} aria-label="Abrir menú" aria-expanded={open} aria-controls="navegacion-principal" className="flex h-11 w-11 items-center justify-center rounded-xl text-[#102c50] hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-700 lg:hidden">
             <Icon name="menu" className="h-6 w-6" />
           </button>
-          <span className="text-sm font-bold tracking-wide text-[#102c50] lg:hidden">VISTA GEO</span>
+          <span className="text-sm font-semibold tracking-[0.03em] text-[#102c50] lg:hidden">VISTA GEO</span>
           <span className="hidden text-sm font-medium text-slate-500 lg:block">Grupo Vista <span className="mx-2 text-slate-300">/</span> Panel de trabajo</span>
           {local && <span className="ml-auto text-xs font-medium text-slate-500">Fotos en este dispositivo</span>}
         </header>
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-7 sm:py-8 lg:px-10">
+        <main className="mx-auto w-full max-w-[90rem] px-4 py-6 sm:px-7 sm:py-8 lg:px-8">
           {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           {children}
         </main>

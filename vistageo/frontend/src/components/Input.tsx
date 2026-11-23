@@ -8,7 +8,7 @@ export function Input({ label, hint, error, trailing, className = '', ...rest }:
       {label && <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>}
       <div className="relative">
         <input
-          className={`min-h-12 w-full rounded-xl border bg-white px-3.5 py-2.5 text-base text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 sm:text-sm ${error ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-300'} ${className}`}
+          className={`min-h-11 w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#2f6ecb] focus:ring-2 focus:ring-[#2f6ecb]/15 ${error ? 'border-rose-600 focus:border-rose-600 focus:ring-rose-600/10' : 'border-slate-300'} ${className}`}
           {...rest}
         />
         {trailing && <div className="absolute inset-y-0 right-3 flex items-center">{trailing}</div>}

@@ -32,13 +32,13 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#102c50] text-white">
-            <Icon name="locations" className="h-8 w-8" />
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[#102c50] text-white">
+            <Icon name="locations" className="h-6 w-6" />
           </span>
-          <h1 className="font-display mt-4 text-3xl font-bold tracking-tight text-[#102c50]">VISTA GEO</h1>
+          <h1 className="mt-4 text-2xl font-semibold tracking-[0.03em] text-[#102c50]">VISTA GEO</h1>
           <p className="mt-1 text-sm text-slate-500">Accede a las ubicaciones de tus clientes</p>
         </div>
-        <form onSubmit={submit} className="space-y-5 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+        <form onSubmit={submit} className="surface-panel space-y-5 p-6">
           <Input
             label="Usuario"
             value={username}
@@ -67,7 +67,7 @@ export function LoginPage() {
             {loading ? 'Ingresando...' : 'Ingresar'}
           </Button>
         </form>
-        <p className="mt-6 text-center text-xs text-slate-400">
+        <p className="mt-6 text-center text-xs text-slate-600">
           Solicita tus credenciales al administrador del sistema.
         </p>
         {localStorage.getItem('vistageo_jornada_habilitada') === 'true' && (

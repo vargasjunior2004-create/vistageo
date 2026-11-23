@@ -39,8 +39,8 @@ export function ChangePasswordPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">Cambiar contraseña</h1>
-      <form onSubmit={submit} className="space-y-4 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+      <h1 className="page-title mb-4">Cambiar contraseña</h1>
+      <form onSubmit={submit} className="surface-panel space-y-4 p-5">
         <Input label="Contraseña actual" type="password" value={current} onChange={(e) => setCurrent(e.target.value.toUpperCase())} required />
         <Input label="Nueva contraseña" type="password" value={next} onChange={(e) => setNext(e.target.value.toUpperCase())} required />
         <Input label="Confirmar nueva contraseña" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value.toUpperCase())} required />
