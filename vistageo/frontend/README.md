@@ -79,8 +79,9 @@ datos automáticamente.
   ubicaciones históricas que carecen de foto o coordenadas.
 - Consultar ubicación busca automáticamente por una parte literal o por todo
   el kardex, sin distinguir mayúsculas y sin modificar espacios. Las
-  coincidencias se cargan al desplazarse y cada una abre su ficha; las fotos
-  se solicitan solo al acercarse a los resultados visibles. Kardex que solo
+  coincidencias se cargan al desplazarse y cada una abre su ficha; la foto
+  se solicita solo al abrir la ficha. Las respuestas de fotos usan `no-store`,
+  por lo que volver a abrir una ficha vuelve a consultar su foto. Kardex que solo
   difieren por mayúsculas siguen siendo registros independientes; los
   espacios se muestran también con un marcador visible sin cambiar el kardex.
 - Los resultados y la ficha muestran el usuario creador; la ficha muestra

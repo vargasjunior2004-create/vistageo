@@ -39,27 +39,6 @@ function VisibleWhitespace({ value }: { value: string }) {
   return <span className="mt-1 block break-all text-xs text-slate-600">Espacios visibles (␠): {JSON.stringify(value).replaceAll(' ', '␠')}</span>
 }
 
-function LazyPhoto({ locationId }: { locationId: number }) {
-  const target = useRef<HTMLSpanElement>(null)
-  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
-
-  useEffect(() => {
-    const node = target.current
-    if (!node) return
-    if (typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setVisible(true)
-        observer.disconnect()
-      }
-    }, { rootMargin: '200px' })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
-
-  return <span ref={target} className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100">{visible && <LocationPhoto locationId={locationId} thumbnail />}</span>
-}
-
 export function LocationSearchPage() {
   const { hasPermission, user } = useAuth()
   const allowed = hasPermission('ubicaciones.consultar')
@@ -268,7 +247,6 @@ export function LocationSearchPage() {
                   setPhotoVersion(null)
                   setSelected(location)
                 }} className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-3 text-left transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
-                  <LazyPhoto locationId={location.id} />
                   <span className="min-w-0 flex-1">
                     <span className="block break-all whitespace-pre-wrap font-medium text-slate-900"><Highlight value={location.kardex} query={query} /></span>
                     <VisibleWhitespace value={location.kardex} />
