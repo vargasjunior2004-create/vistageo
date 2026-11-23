@@ -173,13 +173,13 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
         ? <GpsCapture disabled={busy} onChange={setPosition} />
         : <Button type="button" variant="secondary" disabled={busy} onClick={() => setCapturingGps(true)}>Capturar nueva ubicación GPS</Button>)}
       <label className="block text-sm font-medium text-slate-700">Motivo de actualización
-        <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-300 bg-white p-3" required>
+        <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15" required>
           <option value="">Selecciona un motivo</option>{reasons.map((reason) => <option key={reason.id} value={reason.id}>{reason.nombre}</option>)}
         </select>
       </label>
       {reasons.length === 0 && <p className="text-sm text-amber-800">No hay motivos activos. Solicita uno a un administrador.</p>}
       <label className="block text-sm font-medium text-slate-700">Observación opcional
-        <textarea value={observation} maxLength={2000} onChange={(event) => setObservation(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-300 p-3" />
+        <textarea value={observation} maxLength={2000} onChange={(event) => setObservation(event.target.value)} className="mt-1 block min-h-24 w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15" />
       </label>
       <div className="flex flex-wrap gap-2"><Button type="button" disabled={busy || !reasonId || (!photo && !position && !legacy) || (!!position && !position.acceptable)} onClick={() => void confirm()}>Guardar actualización</Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(false); setPhoto(''); setPosition(null); setCapturingGps(false); setError('') }}>Cancelar</Button></div>

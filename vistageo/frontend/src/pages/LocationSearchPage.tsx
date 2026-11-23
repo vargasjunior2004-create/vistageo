@@ -186,11 +186,11 @@ export function LocationSearchPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <Link to="/" className="text-sm font-semibold text-blue-700">← Volver al panel</Link>
-      <header className="rounded-3xl bg-[#102c50] p-6 text-white">
-        <p className="text-sm text-blue-200">VISTA GEO · Ubicación oficial</p>
-        <h1 className="mt-1 text-2xl font-bold">Consultar ubicación</h1>
+      <header className="space-y-1">
+        <p className="text-sm font-medium text-[#2f6ecb]">Ubicación oficial</p>
+        <h1 className="page-title">Consultar ubicación</h1>
       </header>
-      <div className="rounded-3xl bg-white p-5 shadow-sm">
+      <div className="surface-panel p-5">
         <Input label="Buscar por kardex" value={query} autoComplete="off" hint="Ingresa el kardex exacto para encontrar una ubicación específica o escribe una parte para ver las coincidencias." onChange={(event) => {
           const value = event.target.value
           controllerRef.current?.abort()
@@ -205,11 +205,11 @@ export function LocationSearchPage() {
         <p className="mt-2 text-xs text-slate-600">Las mayúsculas y los espacios pueden distinguir kardex diferentes.</p>
       </div>
       {selected ? (
-        <section ref={detail} tabIndex={-1} className="space-y-4 rounded-3xl bg-white p-5 shadow-sm outline-none">
+        <section ref={detail} tabIndex={-1} className="surface-panel space-y-4 p-5 outline-none">
           <button type="button" className="text-sm font-semibold text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => setSelected(null)}>← Volver a coincidencias</button>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Kardex · Ubicación #{selected.id}</p>
-            <h2 className="mt-1 break-all whitespace-pre-wrap text-xl font-bold text-slate-900">{selected.kardex}</h2>
+            <p className="text-xs font-medium text-slate-600">Kardex · Ubicación #{selected.id}</p>
+            <h2 className="mt-1 break-all whitespace-pre-wrap text-xl font-medium text-slate-900">{selected.kardex}</h2>
             <VisibleWhitespace value={selected.kardex} />
             <p className="mt-2 text-sm text-slate-600">Registrado por: {selected.creado_por_nombre ?? 'Desconocido'}</p>
             <p className="text-sm text-slate-600">Fecha de registro: {selected.creado_en ? new Date(selected.creado_en).toLocaleString() : 'Desconocida'}</p>
@@ -234,7 +234,7 @@ export function LocationSearchPage() {
           <section className="space-y-2 border-t border-slate-100 pt-4">
             <h3 className="font-semibold">Historial de actualizaciones</h3>
             {revisionError && <p role="alert" className="text-sm text-red-700">{revisionError}</p>}
-            {registrationRevision && <div className="rounded-xl bg-slate-50 p-3 text-sm">
+            {registrationRevision && <div className="surface-inset p-3 text-sm">
               <p className="font-semibold">Revisión histórica vinculada</p>
               <p>Origen: {registrationRevision.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : registrationRevision.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
               <p>{registrationRevision.latitud ?? '—'}, {registrationRevision.longitud ?? '—'} · {new Date(registrationRevision.registrado_en).toLocaleString()}</p>
@@ -244,7 +244,7 @@ export function LocationSearchPage() {
             {historyError && <p role="alert" className="text-sm text-red-700">{historyError}</p>}
             {historyLoading && <p role="status" className="text-sm text-slate-500">Cargando historial...</p>}
             {!historyLoading && history.length === 0 && !historyError && <p className="text-sm text-slate-600">Aún no hay actualizaciones registradas.</p>}
-            <ul className="space-y-2">{history.map((item) => <li key={item.id} className="rounded-xl bg-slate-50 p-3 text-sm">
+            <ul className="space-y-2">{history.map((item) =>             <li key={item.id} className="surface-inset p-3 text-sm">
               <p className="font-semibold">{item.motivo}</p>
               <p>{item.usuario} · {new Date(item.fecha).toLocaleString()}</p>
               <p>{[item.fachada && 'Fachada', item.gps && 'GPS'].filter(Boolean).join(' y ')}</p>
@@ -267,10 +267,10 @@ export function LocationSearchPage() {
                   setHistoryLoading(true)
                   setPhotoVersion(null)
                   setSelected(location)
-                }} className="flex w-full items-center gap-4 rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-slate-100 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
+                }} className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-3 text-left transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
                   <LazyPhoto locationId={location.id} />
                   <span className="min-w-0 flex-1">
-                    <span className="block break-all whitespace-pre-wrap font-bold text-slate-900"><Highlight value={location.kardex} query={query} /></span>
+                    <span className="block break-all whitespace-pre-wrap font-medium text-slate-900"><Highlight value={location.kardex} query={query} /></span>
                     <VisibleWhitespace value={location.kardex} />
                     <span className="mt-1 block text-sm text-slate-600">Registrado por: {location.creado_por_nombre ?? 'Desconocido'}</span>
                     {location.registro_pendiente && <span className="mt-1 block text-xs font-semibold text-amber-800">Registro pendiente o requiere revisión</span>}

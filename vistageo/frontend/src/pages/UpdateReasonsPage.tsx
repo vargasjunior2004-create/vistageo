@@ -64,16 +64,16 @@ export function UpdateReasonsPage() {
 
   if (!allowed) return <p>No tienes permiso para administrar motivos.</p>
   return <div className="mx-auto max-w-3xl space-y-4">
-    <h1 className="text-2xl font-bold text-slate-900">Motivos de actualización</h1>
+    <h1 className="page-title">Motivos de actualización</h1>
     <p className="text-sm text-slate-600">Los motivos inactivos se conservan en el historial, pero no se pueden seleccionar.</p>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-    <form onSubmit={save} className="flex flex-wrap items-end gap-3 rounded-3xl bg-white p-5 shadow-sm">
+    <form onSubmit={save} className="surface-panel flex flex-wrap items-end gap-3 p-5">
       <div className="min-w-52 flex-1"><Input label={editing ? 'Editar motivo' : 'Nuevo motivo'} maxLength={160} value={name} onChange={(event) => setName(event.target.value)} /></div>
       <Button type="submit" disabled={busy || !name.trim()}>{editing ? 'Guardar cambios' : 'Agregar motivo'}</Button>
       {editing && <Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(null); setName('') }}>Cancelar</Button>}
     </form>
     {loading ? <p>Cargando motivos...</p> : reasons.length === 0 ? <p>No hay motivos registrados.</p> :
-      <ul className="space-y-2">{reasons.map((reason) => <li key={reason.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
+      <ul className="space-y-2">{reasons.map((reason) => <li key={reason.id} className="surface-panel flex flex-wrap items-center justify-between gap-3 p-4">
         <div><p className="font-semibold">{reason.nombre}</p><p className="text-sm text-slate-600">{reason.activo ? 'Activo' : 'Inactivo'}</p></div>
         <div className="flex gap-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(reason); setName(reason.nombre) }}>Editar</Button>
           <Button type="button" variant="secondary" disabled={busy || !!editing} onClick={() => void toggle(reason)}>{reason.activo ? 'Desactivar' : 'Activar'}</Button></div>

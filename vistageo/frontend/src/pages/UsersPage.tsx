@@ -102,7 +102,7 @@ export function UsersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Usuarios</h1>
+        <h1 className="page-title">Usuarios</h1>
         {canManage && canListRoles && (
           <Button onClick={() => setCreating(true)}>Nuevo usuario</Button>
         )}
@@ -112,14 +112,14 @@ export function UsersPage() {
       {canManage && !canListRoles && <p className="text-sm text-slate-600">Para crear usuarios o cambiar roles se requiere acceso a la lista de roles.</p>}
 
       {creating && (
-        <form onSubmit={createUser} className="space-y-3 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+        <form onSubmit={createUser} className="surface-panel space-y-3 p-5">
           <h2 className="font-semibold">Crear usuario</h2>
           <Input label="Usuario" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.toUpperCase() })} required />
           <Input label="Contraseña" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value.toUpperCase() })} required />
           {canListRoles && <label className="block">
             <span className="mb-1 block text-sm font-medium text-slate-700">Rol</span>
             <select
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15"
               value={form.role_id}
               onChange={(e) => setForm({ ...form, role_id: Number(e.target.value) })}
             >
@@ -136,13 +136,13 @@ export function UsersPage() {
       )}
 
       {editing && (
-        <form onSubmit={saveEdit} className="space-y-3 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+        <form onSubmit={saveEdit} className="surface-panel space-y-3 p-5">
           <h2 className="font-semibold">Editar usuario #{editing.id}</h2>
           <Input label="Usuario" value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value.toUpperCase() })} required />
           {canListRoles && <label className="block">
             <span className="mb-1 block text-sm font-medium text-slate-700">Rol</span>
             <select
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15"
               value={editing.role_id}
               onChange={(e) => setEditing({ ...editing, role_id: Number(e.target.value) })}
             >
@@ -167,7 +167,7 @@ export function UsersPage() {
       )}
 
       {resetting && (
-        <form onSubmit={resetPassword} className="space-y-3 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+        <form onSubmit={resetPassword} className="surface-panel space-y-3 p-5">
           <h2 className="font-semibold">Restablecer contraseña de {resetting.username}</h2>
           <Input label="Contraseña temporal" type="password" value={tempPassword} onChange={(e) => setTempPassword(e.target.value.toUpperCase())} required />
           <div className="flex gap-2">
@@ -180,9 +180,9 @@ export function UsersPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div className="overflow-x-auto rounded-3xl bg-white shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+        <div className="surface-panel overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-100 text-left text-slate-600">
+            <thead className="bg-slate-50 text-left text-slate-600">
               <tr>
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">Usuario</th>
@@ -193,12 +193,12 @@ export function UsersPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100">
+                <tr key={u.id} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
                   <td className="px-4 py-3">{u.id}</td>
                   <td className="px-4 py-3 font-medium">{u.username}</td>
                   <td className="px-4 py-3">{roleName(u.role_id)}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-1 text-xs ${u.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${u.active ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
                       {u.active ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>

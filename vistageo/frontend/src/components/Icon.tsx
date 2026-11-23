@@ -19,5 +19,5 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
     logout: <><path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10" /></>,
     arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
   }
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]}</svg>
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]}</svg>
 }

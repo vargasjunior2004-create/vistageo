@@ -134,7 +134,7 @@ export function GpsCapture({ disabled, onChange }: Props) {
     }
   }, [disabled])
 
-  return <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+  return <div className="surface-inset space-y-2 p-4">
     <p role="status" className="text-sm">{status}</p>
     {position && limits && <>
       <p className="text-sm">{position.latitude}, {position.longitude} · Precisión estimada: {position.accuracy} m ({gpsQuality(position.accuracy, limits)})</p>

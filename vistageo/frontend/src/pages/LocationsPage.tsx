@@ -87,13 +87,13 @@ export function LocationsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Ubicaciones</h1>
+      <h1 className="page-title">Ubicaciones</h1>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <form onSubmit={(e) => { e.preventDefault(); setSelected(null); if (filter === search && offset === 0) void load(undefined, true); else { deliberateLoad.current = true; setOffset(0); setFilter(search) } }} className="flex flex-wrap items-end gap-2">
         <div className="flex-1"><Input label="Buscar kardex exacto" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <Button type="submit">Buscar</Button>
       </form>
-      <form onSubmit={createLocation} className="flex flex-wrap items-end gap-2 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+      <form onSubmit={createLocation} className="surface-panel flex flex-wrap items-end gap-3 p-5">
         <div className="flex-1">
           <Input label="Kardex" value={kardex} onChange={(e) => setKardex(e.target.value)} />
         </div>
@@ -108,7 +108,7 @@ export function LocationsPage() {
             <button
               key={loc.id}
               onClick={() => { setPhotoVersion(null); setSelected(loc) }}
-              className={`rounded-2xl p-4 text-left shadow transition ${selected?.id === loc.id ? 'bg-blue-50 ring-2 ring-blue-600' : 'bg-white hover:bg-slate-50'}`}
+              className={`rounded-xl border p-4 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected?.id === loc.id ? 'border-[#2f6ecb] bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
             >
               <p className="font-semibold text-slate-900">#{loc.id}</p>
               <p className="text-sm text-slate-600">{loc.kardex}</p>
@@ -124,7 +124,7 @@ export function LocationsPage() {
       </div>
 
       {selected && (
-        <div className="space-y-3 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+        <div className="surface-panel space-y-3 p-5">
           <h2 className="font-semibold">Ubicación de {selected.kardex}</h2>
           <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
           <p className="text-sm text-slate-600">Coordenadas vigentes: {selected.latitud ?? '—'}, {selected.longitud ?? '—'} {selected.url_gps ?? ''}</p>

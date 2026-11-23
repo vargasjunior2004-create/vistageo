@@ -65,9 +65,9 @@ export function SourcesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Procedencia histórica</h1>
+      <h1 className="page-title">Procedencia histórica</h1>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="grid gap-2 rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100 sm:grid-cols-4">
+      <div className="surface-panel grid gap-3 p-5 sm:grid-cols-4">
         <Input label="Carpeta" value={filters.carpeta} onChange={(e) => setFilters({ ...filters, carpeta: e.target.value })} />
         <Input label="Estado" value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })} />
         <Input label="Kardex" value={filters.kardex} onChange={(e) => setFilters({ ...filters, kardex: e.target.value })} />
@@ -80,7 +80,7 @@ export function SourcesPage() {
       ) : (
         <div className="space-y-2">
           {items.map((s) => (
-            <div key={s.id} className="rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100">
+            <div key={s.id} className="surface-panel p-5">
               <p className="font-medium text-slate-900">#{s.id} · {s.tipo}</p>
               <p className="text-sm text-slate-600 break-all">{s.ruta_original}</p>
               <p className="text-xs text-slate-400">
