@@ -195,7 +195,7 @@ def create_user(data: UserCreate, actor: User = Depends(current_user), db: Sessi
     protect_privileged_roles(actor, role)
     if role.name not in OFFICIAL_ROLES:
         raise HTTPException(status_code=409, detail="El rol no pertenece al catálogo oficial")
-    user = User(username=data.username, password_hash=password_hash(data.password.get_secret_value()), role_id=role.id, must_change_password=True)
+    user = User(username=data.username, password_hash=password_hash(data.password.get_secret_value()), role_id=role.id, must_change_password=False)
     db.add(user)
     try:
         db.flush()

@@ -20,7 +20,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       const user = await login(username, password)
-      navigate(user.must_change_password ? '/cambiar-contraseña' : '/')
+      navigate(user.must_change_password ? '/cambiar-contrasena' : '/')
     } catch (err) {
       setError((err as Error).message || 'Credenciales inválidas')
     } finally {

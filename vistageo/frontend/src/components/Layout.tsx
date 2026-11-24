@@ -143,6 +143,9 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
                 <span className="block truncate text-xs text-blue-200">{user.role_name}</span>
               </span>
             </div>
+            <Link to="/cambiar-contrasena" onClick={() => setOpen(false)} title={collapsed ? 'Cambiar contraseña' : undefined} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+              <Icon name="roles" className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:sr-only' : ''}>Cambiar contraseña</span>
+            </Link>
             <button type="button" onClick={() => void signOut()} title={collapsed ? 'Cerrar sesión' : undefined} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
               <Icon name="logout" className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:sr-only' : ''}>Cerrar sesión</span>
             </button>

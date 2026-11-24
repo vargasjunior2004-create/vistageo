@@ -950,6 +950,31 @@ def test_admin_create_normalization_permissions_and_validation_redaction(api):
     assert client.patch(f"/usuarios/{created.json()['id']}", headers=admin, json={"active": "false"}).status_code == 422
 
 
+def test_new_user_can_work_and_change_password_voluntarily(api):
+    client, factory = api
+    admin = headers(client)
+    with factory() as db:
+        role = db.scalar(select(Role).where(Role.name == "TECNICO"))
+        role.permissions = [db.scalar(select(Permission).where(Permission.name == "ubicaciones.consultar"))]
+        role_id = role.id
+        db.commit()
+    created = client.post("/usuarios", headers=admin, json={
+        "username": "nuevo", "password": "NEWPASS9", "role_id": role_id,
+    })
+    assert created.status_code == 201
+    assert created.json()["must_change_password"] is False
+    response = login(client, "nuevo", "NEWPASS9")
+    assert response.status_code == 200 and response.json()["must_change_password"] is False
+    auth = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    assert client.get("/ubicaciones", headers=auth).status_code == 200
+    assert client.post("/auth/password", headers=auth, json={
+        "current_password": "NEWPASS9", "new_password": "FINALPASS9",
+    }).status_code == 204
+    assert client.get("/auth/me", headers=auth).status_code == 401
+    assert login(client, "nuevo", "NEWPASS9").status_code == 401
+    assert login(client, "nuevo", "FINALPASS9").status_code == 200
+
+
 def test_deactivation_revokes_sessions_and_keeps_audit(api):
     client, factory = api
     admin = headers(client)

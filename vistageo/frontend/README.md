@@ -50,6 +50,9 @@ datos automáticamente.
 ## Notas
 
 - El token se guarda en `localStorage`; cerrar sesión lo elimina.
+- Las cuentas nuevas pueden acceder con su contraseña inicial y cambiarla
+  opcionalmente desde el menú. Un restablecimiento administrativo sigue
+  exigiendo cambiar la contraseña temporal.
 - Las acciones deliberadas envían `X-Actividad-Usuario: true`.
 - El frontend no sustituye la autorización del backend; todos los permisos se verifican en la API.
 - La navegación lateral se adapta a móviles y puede contraerse en escritorio.
