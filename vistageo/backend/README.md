@@ -289,6 +289,9 @@ almacena solo su huella y debe conservarse de forma segura. Para una
 contraseña temporal, la respuesta indica `must_change_password: true`: solo
 se permiten `/auth/me`, `/auth/password` y `/auth/logout` hasta cambiarla.
 Cambiar la contraseña revoca las sesiones y requiere iniciar sesión otra vez.
+Las cuentas nuevas creadas mediante `/usuarios` pueden usar su contraseña
+inicial sin cambiarla; el cambio propio es opcional. Esta regla no modifica
+cuentas existentes ni el cambio obligatorio tras un restablecimiento.
 
 Una sesión vence a los 10 minutos sin actividad. El cliente debe enviar
 `X-Actividad-Usuario: true` **solo** cuando una petición representa una
@@ -642,10 +645,10 @@ de shell, capturas, registros ni documentación.
    técnico obtenido en esa respuesta:
 
    ```json
-   {"username": "TECNICO1", "password": "<TEMPORAL>", "role_id": "<ID_DEL_ROL_TECNICO>"}
+   {"username": "TECNICO1", "password": "<CONTRASEÑA_INICIAL>", "role_id": "<ID_DEL_ROL_TECNICO>"}
    ```
 
-   La persona usuaria debe cambiar la contraseña temporal en su primer acceso.
+   La persona usuaria puede cambiar la contraseña inicial cuando lo desee.
 
 3. Para autorizar consultas de usuarios a un rol, un gestor de permisos
    autorizado llama `PUT /roles/{id}/permisos`:
