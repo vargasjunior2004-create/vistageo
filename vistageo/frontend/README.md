@@ -72,8 +72,10 @@ datos automáticamente.
 - La captura presencial busca durante un máximo de 30 segundos y conserva la
   mejor medición reciente; puede cancelarse o repetirse. Se muestra la precisión
   sin redondear y no se permiten nuevas capturas por encima del límite aceptable
-  configurado en la API (20 m por defecto). Las mediciones caducan a los 30
-  segundos. Enlaces compartidos no tienen precisión ni hora de captura conocida.
+  configurado en la API (20 m por defecto). Las mediciones sin confirmar caducan
+  a los 30 segundos; al confirmar se detiene el GPS y se conserva el punto hasta
+  guardarlo o iniciar otra búsqueda. Enlaces compartidos no tienen precisión ni
+  hora de captura conocida.
   Los borradores antiguos sin precisión solo pueden reintentarse si el servidor
   ya recibió la operación; de lo contrario, descártalos y vuelve a capturar.
 - Si un registro de campo quedó pendiente, el buscador y la comprobación
