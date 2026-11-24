@@ -115,6 +115,11 @@ datos automáticamente.
 - Compartir abre el selector nativo solo si el navegador admite Web Share con
   archivos. WhatsApp debe estar disponible en el dispositivo y el usuario
   decide el destino y confirma el envío. El resultado depende del dispositivo.
+  Las fotos seleccionadas admiten descripciones opcionales, conservadas solo
+  mientras la página está abierta. Si hay descripciones, se envía un texto
+  numerado en el orden de las fotos seleccionadas; la aplicación receptora puede
+  omitir el texto o alterar la presentación, por lo que la correspondencia no
+  puede garantizarse en todos los dispositivos.
 - La cámara, GPS y service worker requieren HTTPS o localhost. El service worker
   solo se registra en producción y guarda recursos estáticos, no respuestas
   privadas de la API. Comprueba el funcionamiento offline en el dispositivo

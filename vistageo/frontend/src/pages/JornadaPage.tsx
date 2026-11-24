@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { CameraInput } from '../components/CameraInput'
 import { deletePhotos, listPhotos, savePhoto, type JornadaPhoto } from '../services/localPhotos'
+import { prepareJornadaShare } from '../services/jornadaShare'
 
 function PhotoThumbnail({ photo, contain = false }: { photo: JornadaPhoto; contain?: boolean }) {
   const [url, setUrl] = useState('')
@@ -17,6 +18,7 @@ function PhotoThumbnail({ photo, contain = false }: { photo: JornadaPhoto; conta
 export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
   const [photos, setPhotos] = useState<JornadaPhoto[]>([])
   const [selected, setSelected] = useState<string[]>([])
+  const [descriptions, setDescriptions] = useState<Record<string, string>>({})
   const [preview, setPreview] = useState<JornadaPhoto | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -59,6 +61,9 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
     if (!selected.length || !window.confirm(`¿Eliminar ${selected.length} foto(s) de este dispositivo?`)) return
     try {
       await deletePhotos(selected)
+      setDescriptions((current) => Object.fromEntries(
+        Object.entries(current).filter(([id]) => !selected.includes(id)),
+      ))
       setSelected([])
       setPreview(null)
       await load()
@@ -70,7 +75,8 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
 
   const share = async () => {
     const extensions: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic' }
-    const files = photos.filter((photo) => selected.includes(photo.id))
+    const prepared = prepareJornadaShare(photos, selected, descriptions)
+    const files = prepared.photos
       .map((photo) => new File([photo.blob], `jornada-${photo.id}.${extensions[photo.blob.type] ?? 'img'}`,
         { type: photo.blob.type || 'image/jpeg', lastModified: photo.createdAt }))
     if (!files.length) {
@@ -82,7 +88,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
       return
     }
     try {
-      await navigator.share({ files, title: 'Fotos de jornada' })
+      await navigator.share({ files, title: 'Fotos de jornada', ...(prepared.text === undefined ? {} : { text: prepared.text }) })
       setMessage('Se abrió el selector para compartir. Confirma el envío en WhatsApp.')
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -92,6 +98,8 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
       }
     }
   }
+
+  const selectedPhotos = photos.filter((photo) => selected.includes(photo.id))
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -123,6 +131,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
             <Button type="button" variant="danger" disabled={!selected.length} onClick={() => void remove()}>Eliminar ({selected.length})</Button>
             <Button type="button" disabled={!selected.length} onClick={() => void share()}>Compartir fotos</Button>
           </div>
+          {!!selected.length && <p className="text-sm text-slate-600">Las descripciones son opcionales y se incluyen en un reporte numerado. Su recepción depende de la aplicación y del dispositivo.</p>}
           {!photos.length && <p className="rounded-2xl bg-white p-5 text-slate-600">Todavía no hay fotos. Abre la cámara para empezar.</p>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((photo) => (
@@ -136,6 +145,15 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
                   }} />
                   {new Date(photo.createdAt).toLocaleString()}
                 </label>
+                {selected.includes(photo.id) && <label className="block px-3 pb-3 text-xs font-medium text-slate-700">
+                  Descripción opcional · Foto {selectedPhotos.findIndex((item) => item.id === photo.id) + 1}
+                  <textarea
+                    className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900 focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15"
+                    rows={2}
+                    value={descriptions[photo.id] ?? ''}
+                    onChange={(event) => setDescriptions((current) => ({ ...current, [photo.id]: event.target.value }))}
+                  />
+                </label>}
               </div>
             ))}
           </div>
