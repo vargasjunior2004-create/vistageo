@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { apiRequest } from '../api/client'
 import { gpsQuality, isGpsPositionValid, type GpsLimits, type GpsPosition } from '../services/gpsCapture'
 import { Button } from './Button'
@@ -8,7 +8,9 @@ type Props = {
   onChange: (position: GpsPosition | null) => void
 }
 
-export function GpsCapture({ disabled, onChange }: Props) {
+export type GpsCaptureHandle = { stop: () => void }
+
+export const GpsCapture = forwardRef<GpsCaptureHandle, Props>(function GpsCapture({ disabled, onChange }, ref) {
   const [limits, setLimits] = useState<GpsLimits | null>(null)
   const [position, setPosition] = useState<GpsPosition | null>(null)
   const [status, setStatus] = useState('Preparando captura GPS...')
@@ -30,6 +32,14 @@ export function GpsCapture({ disabled, onChange }: Props) {
     watch.current = null
     timer.current = null
   }
+
+  useImperativeHandle(ref, () => ({
+    stop: () => {
+      stop()
+      if (expiration.current !== null) window.clearTimeout(expiration.current)
+      expiration.current = null
+    },
+  }))
 
   const start = (config: GpsLimits) => {
     stop()
@@ -74,7 +84,9 @@ export function GpsCapture({ disabled, onChange }: Props) {
           callback.current(null)
           setStatus('La medición caducó. Espera una nueva ubicación o repite la captura.')
         }, Math.max(0, result.timestamp + 30000 - Date.now()))
-        setStatus('Buscando una señal más precisa; puedes confirmar si la precisión es aceptable.')
+        setStatus(value.acceptable
+          ? 'Precisión aceptable; puedes confirmar o esperar una señal mejor.'
+          : 'Mejorando la precisión; espera una señal aceptable.')
       },
       (error) => {
         if (generation.current !== current) return
@@ -150,4 +162,4 @@ export function GpsCapture({ disabled, onChange }: Props) {
       }}>Cancelar captura</Button>}
     </div>}
   </div>
-}
+})
