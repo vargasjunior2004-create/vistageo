@@ -17,13 +17,15 @@ from sqlalchemy.orm import Session, lazyload
 
 from app.database import get_db
 from app.models import AuditEvent, AuditRecord, AuthSession, Contract, HistoricalSource, Location, LocationRevision, Permission, PhotoOperation, Photograph, Role, UpdateReason, User, as_utc, now_utc
-from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LocationUpdate, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RoleCreate, SessionUserRead, SharedLocationRequest, SharedLocationRead, UpdateReasonCreate, UpdateReasonEdit, UpdateReasonRead, UserCreate, UserRead, UserUpdate
+from app.schemas import ContractCreate, ContractRead, FieldLocationCreate, HistoricalSourceRead, LocationCreate, LocationRead, LocationRevisionCreate, LocationRevisionRead, LocationUpdate, LoginRequest, PasswordChange, PasswordReset, PermissionUpdate, PhotographReplace, RefreshRequest, RoleCreate, SessionRead, SessionUserRead, SharedLocationRequest, SharedLocationRead, UpdateReasonCreate, UpdateReasonEdit, UpdateReasonRead, UserCreate, UserRead, UserUpdate
 from app.actualizacion_ubicacion import update_location
 from app.fotografia import photo_version, recovery_loop, replace_photo
 from app.registro_ubicacion import register_location
 from app.enlaces_gps import resolve_map_url
 from app.calidad_gps import gps_limits
-from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, OFFICIAL_ROLES, PERMISSIONS, PERMISSION_MANAGERS, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, token_hash, verify_password
+from app.rate_limit import limiter, login_rate_limits
+from app.security import ADMIN, LOCK_DURATION, MAX_ATTEMPTS, OFFICIAL_ROLES, PERMISSIONS, PERMISSION_MANAGERS, _revoke_session, current_session, current_user, dummy_hash, password_hash, require_admin, require_permission, require_permission_manager, revoke_all_sessions, token_hash, verify_password
+from app.tokens import absolute_session_ttl, create_access_token, generate_refresh_token, hash_refresh_token, refresh_token_ttl, session_idle_ttl
 from app.storage import BUCKET, Storage
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False, interpolate=False)
@@ -41,15 +43,77 @@ async def lifespan(_app: FastAPI):
                 await task
 
 
-app = FastAPI(title="GEO VISTA: usuarios y roles", lifespan=lifespan)
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+EXPOSE_DOCS = _env_bool("VISTAGEO_EXPOSE_DOCS", False)
+FORCE_HTTPS = _env_bool("FORCE_HTTPS", False)
+HSTS_ENABLED = _env_bool("HSTS_ENABLED", FORCE_HTTPS)
+TRUSTED_HOSTS = [h.strip() for h in os.environ.get("TRUSTED_HOSTS", "testserver,localhost,127.0.0.1,::1").split(",") if h.strip()]
+MAX_REQUEST_BODY_BYTES = _env_int("MAX_REQUEST_BODY_BYTES", 10 * 1024 * 1024)
+
+app = FastAPI(
+    title="GEO VISTA: usuarios y roles",
+    lifespan=lifespan,
+    docs_url="/docs" if EXPOSE_DOCS else None,
+    redoc_url="/redoc" if EXPOSE_DOCS else None,
+    openapi_url="/openapi.json" if EXPOSE_DOCS else None,
+)
 origins = [origin.strip() for origin in os.environ.get("CORS_ORIGINS", "").split(",") if origin.strip()]
 if "*" in origins:
     raise RuntimeError("CORS_ORIGINS requiere orígenes explícitos")
+
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
+if FORCE_HTTPS:
+    app.add_middleware(HTTPSRedirectMiddleware)
 app.add_middleware(
     CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-Actividad-Usuario"],
     expose_headers=["X-Foto-Version"],
 )
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > MAX_REQUEST_BODY_BYTES:
+                    return JSONResponse(status_code=413, content={"detail": "Solicitud demasiado grande"})
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Content-Length inválido"})
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-site")
+    response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+    if HSTS_ENABLED:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,8 +142,32 @@ def audit(
     db.add(AuditEvent(action=action, actor_id=actor, target_id=target, role_id=role_id, details=details))
 
 
-def revoke_sessions(db: Session, user_id: int) -> None:
-    db.execute(update(AuthSession).where(AuthSession.user_id == user_id).values(revoked=True))
+def client_ip(request: Request) -> str:
+    if os.environ.get("TRUST_PROXY_HEADERS", "").lower() == "true":
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip() or "unknown"
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_login_rate_limit(request: Request, username: str) -> None:
+    ip_limit, ip_window, account_limit, account_window = login_rate_limits()
+    ip = client_ip(request)
+    allowed_ip, retry_ip = limiter.hit(f"login:ip:{ip}", ip_limit, ip_window)
+    allowed_account, retry_account = limiter.hit(
+        f"login:account:{username}", account_limit, account_window
+    )
+    if not allowed_ip or not allowed_account:
+        retry_after = max(retry_ip, retry_account, 1)
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiados intentos de inicio de sesión. Intenta más tarde.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def revoke_sessions(db: Session, user_id: int, reason: str = "REVOCACION_MASIVA") -> None:
+    revoke_all_sessions(db, user_id, reason)
 
 
 def read_role(role: Role) -> dict:
@@ -120,8 +208,14 @@ def protect_last_admin(db: Session, target: User, new_role: Role, active: bool) 
         raise HTTPException(status_code=409, detail="Debe quedar al menos un administrador activo")
 
 
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.post("/auth/login")
-def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)) -> dict:
+def login(data: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
+    enforce_login_rate_limit(request, data.username)
     user = db.scalar(
         select(User).options(lazyload(User.role)).where(User.username == data.username).with_for_update(of=User)
     )
@@ -141,12 +235,31 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
         raise HTTPException(status_code=401, detail="Credenciales inválidas", headers={"WWW-Authenticate": "Bearer"})
     user.failed_attempts = 0
     user.locked_until = None
-    token = secrets.token_urlsafe(32)
-    db.add(AuthSession(token_hash=token_hash(token), user_id=user.id, last_activity=now))
-    audit(db, "INICIO_SESION", user.id, user.id)
+    refresh_token = generate_refresh_token()
+    legacy_token = secrets.token_urlsafe(32)
+    session = AuthSession(
+        token_hash=token_hash(legacy_token),
+        user_id=user.id,
+        last_activity=now,
+        created_at=now,
+        expires_at=now + absolute_session_ttl(),
+        refresh_hash=hash_refresh_token(refresh_token),
+        refresh_expires_at=min(now + refresh_token_ttl(), now + absolute_session_ttl()),
+        refresh_generation=0,
+    )
+    db.add(session)
+    db.flush()
+    access_token, expires_in = create_access_token(session.id, user.id, now=now)
+    audit(db, "INICIO_SESION", user.id, user.id, details={"sesion_id": session.id})
     commit(db)
     response.headers["Cache-Control"] = "no-store"
-    return {"access_token": token, "token_type": "bearer", "must_change_password": user.must_change_password}
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+        "must_change_password": user.must_change_password,
+    }
 
 
 @app.get("/auth/me", response_model=SessionUserRead)
@@ -161,8 +274,99 @@ def me(auth: AuthSession = Depends(current_session)) -> SessionUserRead:
 
 @app.post("/auth/logout", status_code=204)
 def logout(auth: AuthSession = Depends(current_session), db: Session = Depends(get_db)) -> Response:
-    auth.revoked = True
-    audit(db, "CIERRE_SESION", auth.user_id, auth.user_id)
+    now = now_utc()
+    _revoke_session(auth, now, "CIERRE_SESION")
+    audit(db, "CIERRE_SESION", auth.user_id, auth.user_id, details={"sesion_id": auth.id})
+    commit(db)
+    return Response(status_code=204)
+
+
+@app.post("/auth/refresh")
+def refresh_session(data: RefreshRequest, response: Response, db: Session = Depends(get_db)) -> dict:
+    refresh_hash = hash_refresh_token(data.refresh_token)
+    now = now_utc()
+    session = db.scalar(
+        select(AuthSession).options(lazyload(AuthSession.user)).where(AuthSession.refresh_hash == refresh_hash).with_for_update(of=AuthSession)
+    )
+    if session is None:
+        reused = db.scalar(
+            select(AuthSession).options(lazyload(AuthSession.user)).where(AuthSession.previous_refresh_hash == refresh_hash).with_for_update(of=AuthSession)
+        )
+        if reused is not None:
+            revoke_sessions(db, reused.user_id, "REUTILIZACION_REFRESH")
+            audit(db, "REUTILIZACION_REFRESH", reused.user_id, reused.user_id, details={"sesion_id": reused.id})
+            commit(db)
+        raise HTTPException(status_code=401, detail="Sesión inválida o vencida", headers={"WWW-Authenticate": "Bearer"})
+    if session.revoked or not session.user.active:
+        raise HTTPException(status_code=401, detail="Sesión inválida o vencida", headers={"WWW-Authenticate": "Bearer"})
+    if session.expires_at is not None and as_utc(session.expires_at) <= now:
+        _revoke_session(session, now, "EXPIRACION_ABSOLUTA")
+        audit(db, "SESION_VENCIDA", session.user_id, session.user_id, details={"motivo": "EXPIRACION_ABSOLUTA", "sesion_id": session.id})
+        commit(db)
+        raise HTTPException(status_code=401, detail="Sesión inválida o vencida", headers={"WWW-Authenticate": "Bearer"})
+    if session.refresh_expires_at is not None and as_utc(session.refresh_expires_at) <= now:
+        _revoke_session(session, now, "REFRESH_EXPIRADO")
+        audit(db, "SESION_VENCIDA", session.user_id, session.user_id, details={"motivo": "REFRESH_EXPIRADO", "sesion_id": session.id})
+        commit(db)
+        raise HTTPException(status_code=401, detail="Sesión inválida o vencida", headers={"WWW-Authenticate": "Bearer"})
+    if now - as_utc(session.last_activity) >= session_idle_ttl():
+        _revoke_session(session, now, "INACTIVIDAD")
+        audit(db, "SESION_VENCIDA", session.user_id, session.user_id, details={"motivo": "INACTIVIDAD", "sesion_id": session.id})
+        commit(db)
+        raise HTTPException(status_code=401, detail="Sesión inválida o vencida", headers={"WWW-Authenticate": "Bearer"})
+
+    new_refresh = generate_refresh_token()
+    session.previous_refresh_hash = session.refresh_hash
+    session.refresh_hash = hash_refresh_token(new_refresh)
+    session.refresh_generation = (session.refresh_generation or 0) + 1
+    session.refresh_expires_at = min(now + refresh_token_ttl(), as_utc(session.expires_at)) if session.expires_at else now + refresh_token_ttl()
+    access_token, expires_in = create_access_token(session.id, session.user_id, now=now)
+    audit(db, "RENOVAR_SESION", session.user_id, session.user_id, details={"sesion_id": session.id})
+    commit(db)
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+    }
+
+
+@app.get("/auth/sessions", response_model=list[SessionRead])
+def list_sessions(auth: AuthSession = Depends(current_session), db: Session = Depends(get_db)) -> list[SessionRead]:
+    sessions = list(db.scalars(
+        select(AuthSession).where(AuthSession.user_id == auth.user_id, AuthSession.revoked.is_(False)).order_by(AuthSession.last_activity.desc(), AuthSession.id.desc())
+    ).all())
+    return [
+        SessionRead(
+            id=item.id,
+            creado_en=item.created_at,
+            ultima_actividad=item.last_activity,
+            expira_en=item.expires_at,
+            actual=item.id == auth.id,
+        )
+        for item in sessions
+    ]
+
+
+@app.delete("/auth/sessions/{session_id}", status_code=204)
+def revoke_own_session(session_id: int, auth: AuthSession = Depends(current_session), db: Session = Depends(get_db)) -> Response:
+    session = db.scalar(
+        select(AuthSession).where(AuthSession.id == session_id, AuthSession.user_id == auth.user_id).with_for_update(of=AuthSession)
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    if not session.revoked:
+        _revoke_session(session, now_utc(), "REVOCACION_USUARIO")
+        audit(db, "REVOCAR_SESION", auth.user_id, auth.user_id, details={"sesion_id": session.id})
+        commit(db)
+    return Response(status_code=204)
+
+
+@app.delete("/auth/sessions", status_code=204)
+def revoke_own_sessions(auth: AuthSession = Depends(current_session), db: Session = Depends(get_db)) -> Response:
+    revoke_sessions(db, auth.user_id, "REVOCACION_TOTAL_USUARIO")
+    audit(db, "REVOCAR_SESIONES", auth.user_id, auth.user_id)
     commit(db)
     return Response(status_code=204)
 
@@ -176,7 +380,7 @@ def change_password(data: PasswordChange, auth: AuthSession = Depends(current_se
         raise HTTPException(status_code=400, detail="La nueva contraseña debe ser diferente")
     user.password_hash = password_hash(data.new_password.get_secret_value())
     user.must_change_password = False
-    revoke_sessions(db, user.id)
+    revoke_sessions(db, user.id, "CAMBIO_CONTRASENA")
     audit(db, "CAMBIO_CONTRASENA", user.id, user.id)
     commit(db)
     return Response(status_code=204)
@@ -191,6 +395,7 @@ def list_users(actor: User = Depends(current_user), db: Session = Depends(get_db
 @app.post("/usuarios", response_model=UserRead, status_code=201)
 def create_user(data: UserCreate, actor: User = Depends(current_user), db: Session = Depends(get_db)) -> User:
     require_permission(actor, "usuarios.gestionar")
+    require_admin(actor)
     role = get_role(db, data.role_id)
     protect_privileged_roles(actor, role)
     if role.name not in OFFICIAL_ROLES:
@@ -217,7 +422,11 @@ def show_user(user_id: int, actor: User = Depends(current_user), db: Session = D
 def edit_user(user_id: int, data: UserUpdate, actor: User = Depends(current_user), db: Session = Depends(get_db)) -> User:
     require_permission(actor, "usuarios.gestionar")
     user = get_user(db, user_id)
+    if user.id == actor.id and (data.role_id is not None or data.active is not None):
+        raise HTTPException(status_code=403, detail="No puedes modificar tu propio rol ni estado")
     role = get_role(db, data.role_id) if data.role_id is not None else user.role
+    if data.role_id is not None and role.id != user.role_id:
+        require_admin(actor)
     protect_privileged_roles(actor, user.role, role)
     if data.role_id is not None and role.name not in OFFICIAL_ROLES:
         raise HTTPException(status_code=409, detail="El rol no pertenece al catálogo oficial")
@@ -230,7 +439,7 @@ def edit_user(user_id: int, data: UserUpdate, actor: User = Depends(current_user
         user.role_id = role.id
     user.active = active
     if not active:
-        revoke_sessions(db, user.id)
+        revoke_sessions(db, user.id, "DESACTIVACION_USUARIO")
     action = "ACTUALIZAR_USUARIO"
     if before["active"] and not active:
         action = "DESACTIVAR_USUARIO"
@@ -247,6 +456,8 @@ def edit_user(user_id: int, data: UserUpdate, actor: User = Depends(current_user
 def reset_password(user_id: int, data: PasswordReset, actor: User = Depends(current_user), db: Session = Depends(get_db)) -> Response:
     require_permission(actor, "usuarios.gestionar")
     user = get_user(db, user_id)
+    if user.id == actor.id:
+        raise HTTPException(status_code=403, detail="Usa /auth/password para cambiar tu propia contraseña")
     protect_privileged_roles(actor, user.role)
     if verify_password(data.temporary_password.get_secret_value(), user.password_hash):
         raise HTTPException(status_code=400, detail="La nueva contraseña debe ser diferente")
@@ -254,8 +465,19 @@ def reset_password(user_id: int, data: PasswordReset, actor: User = Depends(curr
     user.must_change_password = True
     user.failed_attempts = 0
     user.locked_until = None
-    revoke_sessions(db, user.id)
+    revoke_sessions(db, user.id, "RESTABLECER_CONTRASENA")
     audit(db, "RESTABLECER_CONTRASENA", actor.id, user.id)
+    commit(db)
+    return Response(status_code=204)
+
+
+@app.post("/usuarios/{user_id}/revocar-sesiones", status_code=204)
+def revoke_user_sessions(user_id: int, actor: User = Depends(current_user), db: Session = Depends(get_db)) -> Response:
+    require_permission(actor, "usuarios.gestionar")
+    user = get_user(db, user_id)
+    protect_privileged_roles(actor, user.role)
+    revoke_sessions(db, user.id, "REVOCACION_ADMINISTRATIVA")
+    audit(db, "REVOCAR_SESIONES_USUARIO", actor.id, user.id)
     commit(db)
     return Response(status_code=204)
 
@@ -305,6 +527,8 @@ def set_permissions(role_id: int, data: PermissionUpdate, actor: User = Depends(
     role = get_role(db, role_id)
     if role.name == ADMIN:
         require_admin(actor)
+    if role.id == actor.role_id and actor.role.name != ADMIN:
+        raise HTTPException(status_code=403, detail="No puedes modificar los permisos de tu propio rol")
     if not set(data.permissions).issubset(PERMISSIONS):
         raise HTTPException(status_code=422, detail="Permiso desconocido")
     permissions = list(db.scalars(select(Permission).where(Permission.name.in_(data.permissions))).all())

@@ -285,7 +285,8 @@ def test_unified_serves_frontend_and_preserves_api_routes(api, tmp_path):
         assert token.status_code == 200
         auth = {"Authorization": f"Bearer {token.json()['access_token']}"}
         assert client.get("/api/auth/me", headers=auth).json()["username"] == "ADMIN"
-        assert client.get("/api/docs").status_code == 200
+        assert client.get("/api/health").json() == {"status": "ok"}
+        assert client.get("/api/docs").status_code == 404
         assert client.get("/assets/app.js").text == "app"
         assert client.get("/assets/missing.js").status_code == 404
         assert client.get("/missing.js").status_code == 404
@@ -930,6 +931,22 @@ def test_session_expiration_and_explicit_activity(api, monkeypatch):
     assert client.get("/auth/me", headers=auth).status_code == 401
 
 
+def test_refresh_respects_configured_session_idle_timeout(api, monkeypatch):
+    client, factory = api
+    response = login(client, "admin", "testpass1")
+    assert response.status_code == 200
+    monkeypatch.setenv("SESSION_IDLE_MINUTES", "5")
+    with factory() as db:
+        session = db.scalar(select(AuthSession))
+        session.last_activity = datetime.now(timezone.utc) - timedelta(minutes=6)
+        db.commit()
+    refreshed = client.post(
+        "/auth/refresh",
+        json={"refresh_token": response.json()["refresh_token"]},
+    )
+    assert refreshed.status_code == 401
+
+
 def test_admin_create_normalization_permissions_and_validation_redaction(api):
     client, factory = api
     admin = headers(client)
@@ -1086,8 +1103,21 @@ def test_cannot_deactivate_last_administrator(api):
     client, factory = api
     admin = headers(client)
     with factory() as db:
-        user_id = db.scalar(select(User.id).where(User.username == "ADMIN"))
-    assert client.patch(f"/usuarios/{user_id}", headers=admin, json={"active": False}).status_code == 409
+        admin_id = db.scalar(select(User.id).where(User.username == "ADMIN"))
+        admin_role_id = db.scalar(select(Role.id).where(Role.name == "ADMINISTRADOR"))
+    # Un administrador no puede desactivarse a sí mismo.
+    assert client.patch(f"/usuarios/{admin_id}", headers=admin, json={"active": False}).status_code == 403
+    # Crear otro admin para verificar la protección del último administrador activo.
+    created = client.post("/usuarios", headers=admin, json={
+        "username": "ADMIN2", "password": "TESTPASS9", "role_id": admin_role_id,
+    })
+    assert created.status_code == 201
+    admin2 = headers(client, "admin2", "testpass9")
+    # ADMIN2 desactiva a ADMIN: queda ADMIN2 como último activo, debe permitirse.
+    assert client.patch(f"/usuarios/{admin_id}", headers=admin2, json={"active": False}).status_code == 200
+    # ADMIN2 no puede desactivarse a sí mismo (autoedición bloqueada).
+    admin2_id = created.json()["id"]
+    assert client.patch(f"/usuarios/{admin2_id}", headers=admin2, json={"active": False}).status_code == 403
 
 
 def test_unicode_uppercase_is_consistent_for_creation_and_login(api):
@@ -1114,7 +1144,7 @@ def test_only_permission_managers_can_modify_role_permissions(api):
 
 def test_openapi_masks_password_fields(api):
     client, _ = api
-    schemas = client.get("/openapi.json").json()["components"]["schemas"]
+    schemas = client.app.openapi()["components"]["schemas"]
     for model, fields in {
         "LoginRequest": ["password"],
         "UserCreate": ["password"],
@@ -1286,3 +1316,78 @@ def test_asociacion_de_procedencia_es_manual_auditada_y_reversible(api):
         db.commit()
     assert client.put(endpoint, headers=admin, json={"kardex": "a-1"}).status_code == 409
     assert client.delete(endpoint, headers=admin).status_code == 409
+
+
+def test_user_cannot_self_escalate_role(api):
+    client, factory = api
+    headers(client)
+    tech = headers(client, "tech", "testpass3")
+    with factory() as db:
+        tech_id = db.scalar(select(User.id).where(User.username == "TECH"))
+        tech_role = db.scalar(select(Role).where(Role.name == "TECNICO"))
+        tech_role.permissions = list(db.scalars(select(Permission).where(
+            Permission.name.in_(["usuarios.gestionar", "ubicaciones.consultar"])
+        )).all())
+        target = Role(name="JEFE TECNICO")
+        db.add(target)
+        db.commit()
+        jefe_id = target.id
+    response = client.patch(f"/usuarios/{tech_id}", headers=tech, json={"role_id": jefe_id})
+    assert response.status_code == 403
+
+
+def test_user_cannot_self_deactivate(api):
+    client, _factory = api
+    admin = headers(client)
+    me = client.get("/auth/me", headers=admin).json()
+    response = client.patch(f"/usuarios/{me['id']}", headers=admin, json={"active": False})
+    assert response.status_code == 403
+
+
+def test_user_cannot_self_reset_password(api):
+    client, _factory = api
+    admin = headers(client)
+    me = client.get("/auth/me", headers=admin).json()
+    response = client.post(f"/usuarios/{me['id']}/restablecer-contrasena", headers=admin, json={"temporary_password": "NEWPASS9"})
+    assert response.statusCode == 403 if False else response.status_code == 403
+
+
+def test_only_admin_can_assign_roles_on_create(api):
+    client, factory = api
+    manager = headers(client, "manager", "testpass2")
+    with factory() as db:
+        role_id = db.scalar(select(Role.id).where(Role.name == "TECNICO"))
+        manager_role = db.scalar(select(Role).where(Role.name == "GERENTE"))
+        manager_role.permissions = list(db.scalars(select(Permission).where(Permission.name == "usuarios.gestionar")).all())
+        db.commit()
+    response = client.post("/usuarios", headers=manager, json={"username": "NUEVO", "password": "NEWPASS9", "role_id": role_id})
+    assert response.status_code == 403
+
+
+def test_only_admin_can_change_role(api):
+    client, factory = api
+    manager = headers(client, "manager", "testpass2")
+    with factory() as db:
+        tech_id = db.scalar(select(User.id).where(User.username == "TECH"))
+        target = Role(name="JEFE TECNICO")
+        db.add(target)
+        manager_role = db.scalar(select(Role).where(Role.name == "GERENTE"))
+        manager_role.permissions = list(db.scalars(select(Permission).where(Permission.name == "usuarios.gestionar")).all())
+        db.commit()
+        target_id = target.id
+    response = client.patch(f"/usuarios/{tech_id}", headers=manager, json={"role_id": target_id})
+    assert response.status_code == 403
+
+
+def test_non_admin_cannot_modify_own_role_permissions(api):
+    client, factory = api
+    manager = headers(client, "manager", "testpass2")
+    with factory() as db:
+        manager_role = db.scalar(select(Role).where(Role.name == "GERENTE"))
+        manager_role.permissions = list(db.scalars(select(Permission).where(
+            Permission.name.in_(["roles.gestionar", "roles.consultar"])
+        )).all())
+        db.commit()
+    role_id = client.get("/auth/me", headers=manager).json()["role_id"]
+    response = client.put(f"/roles/{role_id}/permisos", headers=manager, json={"permissions": ["roles.consultar"]})
+    assert response.status_code == 403

@@ -49,7 +49,9 @@ datos automáticamente.
 
 ## Notas
 
-- El token se guarda en `localStorage`; cerrar sesión lo elimina.
+- El access token JWT se mantiene en memoria; el refresh token se guarda en
+  `localStorage`. Al expirar el access token, el cliente intenta refrescar una
+  vez; si la sesión ya no es válida, limpia la sesión y redirige al inicio.
 - Las cuentas nuevas pueden acceder con su contraseña inicial y cambiarla
   opcionalmente desde el menú. Un restablecimiento administrativo sigue
   exigiendo cambiar la contraseña temporal.

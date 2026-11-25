@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { apiRequest, clearToken, getToken, setToken } from '../api/client'
+import { apiRequest, clearTokens, getAccessToken, getRefreshToken, setTokens } from '../api/client'
 import type { SessionUser } from '../types/api'
 
 type AuthState = {
@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false)
 
   const clearSession = useCallback((changed = false) => {
-    clearToken()
+    clearTokens()
     setUser(null)
     setError(null)
     setPasswordChanged(changed)
@@ -49,40 +49,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession])
 
   const refresh = useCallback(async () => {
-    const token = getToken()
     setError(null)
-    if (!token) {
+    const hasRefresh = !!getRefreshToken()
+    const hasAccess = !!getAccessToken()
+    if (!hasRefresh && !hasAccess) {
       setUser(null)
       setLoading(false)
       return
     }
     try {
+      if (hasRefresh && !hasAccess) {
+        const refreshed = await apiRequest<{ access_token: string; refresh_token?: string }>('/auth/refresh', {
+          method: 'POST',
+          body: { refresh_token: getRefreshToken() },
+          activity: false,
+        })
+        setTokens(refreshed.access_token, refreshed.refresh_token ?? getRefreshToken())
+      }
       const me = await apiRequest<SessionUser>('/auth/me')
       enableLocalJornada(me)
       setUser(me)
     } catch (err) {
       setUser(null)
-      if (err instanceof Error && 'status' in err && err.status === 401) {
-        if (getToken() === token) clearSession()
+      if (err instanceof Error && 'status' in err && (err as { status?: number }).status === 401) {
+        clearTokens()
+        setSessionExpired(true)
       } else {
         setError(err instanceof Error ? err.message : 'No se pudo verificar la sesión')
       }
     } finally {
       setLoading(false)
     }
-  }, [clearSession])
+  }, [])
 
   useEffect(() => {
     refresh()
   }, [refresh])
 
   const login = useCallback(async (username: string, password: string) => {
-    const result = await apiRequest<{ access_token: string; must_change_password: boolean }>('/auth/login', {
+    const result = await apiRequest<{ access_token: string; refresh_token?: string; must_change_password: boolean }>('/auth/login', {
       method: 'POST',
       body: { username: username.toUpperCase(), password },
       activity: false,
     })
-    setToken(result.access_token)
+    setTokens(result.access_token, result.refresh_token ?? null)
     const me = await apiRequest<SessionUser>('/auth/me')
     enableLocalJornada(me)
     setUser(me)
@@ -93,13 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
-    await apiRequest('/auth/logout', { method: 'POST' })
-    clearSession()
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' })
+    } finally {
+      clearSession()
+    }
   }, [clearSession])
 
-  const permissions = useMemo(() => {
-    return user?.permissions ?? []
-  }, [user])
+  const permissions = useMemo(() => user?.permissions ?? [], [user])
 
   const hasPermission = useCallback(
     (permission: string) => {
