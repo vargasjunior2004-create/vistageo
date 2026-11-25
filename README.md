@@ -1,6 +1,6 @@
 # VISTA GEO
 
-Aplicación para consultar y registrar ubicaciones de clientes por kardex.
+Aplicación para consultar y registrar ubicaciones de clientes por codigo de cliente.
 
 - [Backend FastAPI](vistageo/backend/README.md)
 - [Frontend React](vistageo/frontend/README.md)
