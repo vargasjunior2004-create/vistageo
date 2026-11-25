@@ -70,6 +70,13 @@ datos automáticamente.
   y un enlace compartido; muestra un mapa y exige confirmar el punto. La
   fotografía sigue siendo obligatoria. El mapa incrustado de OpenStreetMap
   recibe las coordenadas para mostrar la vista previa y requiere conexión.
+- Los diagnósticos de cámara se muestran en la consola con el prefijo
+  `[GeoVista camera]` y se conservan en `localStorage` bajo
+  `vistageo_camera_diagnostics` (máximo 100 eventos). Incluyen número de intento,
+  cambios de visibilidad, tipo/tamaño de archivo y dimensiones procesadas; no
+  almacenan imágenes, nombres ni URI. Una PWA no puede observar la URI ni el
+  ciclo de vida nativo de Android; para investigar cierres del navegador se
+  requieren registros del dispositivo.
   Los enlaces aceptados incluyen coordenadas puntuales de Google Maps y
   marcadores de OpenStreetMap; el servidor puede resolver enlaces cortos
   compatibles. La verificación automática de kardex es exacta
