@@ -55,6 +55,9 @@ datos automáticamente.
   exigiendo cambiar la contraseña temporal.
 - Las acciones deliberadas envían `X-Actividad-Usuario: true`.
 - El frontend no sustituye la autorización del backend; todos los permisos se verifican en la API.
+- Las notificaciones temporales usan Sonner: `notifications` en
+  `src/services/notifications.ts` ofrece éxito, error, advertencia e información.
+  Los mensajes idénticos del mismo tipo se agrupan mientras están visibles.
 - La navegación lateral se adapta a móviles y puede contraerse en escritorio.
   Las opciones de trabajo se muestran según los permisos y roles existentes.
 - El panel muestra registro y consulta de ubicaciones según sus permisos.

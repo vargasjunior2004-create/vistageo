@@ -41,6 +41,25 @@ button, input, select, textarea {
   color: #102c50;
 }
 
+[data-sonner-toast][data-styled="true"] {
+  border-radius: 12px;
+  border-inline-start-width: 4px;
+  box-shadow: 0 8px 24px rgb(23 43 69 / 12%);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+[data-sonner-toast][data-type="success"] { border-inline-start-color: #15803d; }
+[data-sonner-toast][data-type="error"] { border-inline-start-color: #b91c1c; }
+[data-sonner-toast][data-type="warning"] { border-inline-start-color: #b45309; }
+[data-sonner-toast][data-type="info"] { border-inline-start-color: #2f6ecb; }
+
+[data-sonner-toast] [data-close-button] {
+  min-width: 32px;
+  min-height: 32px;
+}
+
 @layer components {
   .page-title {
     color: var(--color-brand-dark);

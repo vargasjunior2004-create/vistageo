@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { CameraInput } from '../components/CameraInput'
+import { notifications } from '../services/notifications'
 import { deletePhotos, listPhotos, savePhoto, type JornadaPhoto } from '../services/localPhotos'
 import { prepareJornadaShare } from '../services/jornadaShare'
 
@@ -20,38 +21,54 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
   const [selected, setSelected] = useState<string[]>([])
   const [descriptions, setDescriptions] = useState<Record<string, string>>({})
   const [preview, setPreview] = useState<JornadaPhoto | null>(null)
-  const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loadingPhotos, setLoadingPhotos] = useState(true)
+  const [photosLoaded, setPhotosLoaded] = useState(false)
 
   const load = async () => {
     const saved = await listPhotos()
     setPhotos(saved.sort((a, b) => b.createdAt - a.createdAt))
+    setPhotosLoaded(true)
   }
 
   useEffect(() => {
-    listPhotos().then((items) => setPhotos(items.sort((a, b) => b.createdAt - a.createdAt)))
-      .catch((err: Error) => setMessage(err.message))
+    let active = true
+    listPhotos().then((items) => {
+      if (active) {
+        setPhotos(items.sort((a, b) => b.createdAt - a.createdAt))
+        setPhotosLoaded(true)
+      }
+    }).catch(() => {
+      if (active) notifications.error('No se pudieron cargar las fotos. Inténtalo nuevamente.')
+    }).finally(() => { if (active) setLoadingPhotos(false) })
+    return () => { active = false }
   }, [])
 
   const capture = async (file: File) => {
     setBusy(true)
-    setMessage('')
     try {
-      if (!file.type.startsWith('image/') || !file.size) throw new Error('El archivo seleccionado no es una imagen válida.')
+      if (!file.type.startsWith('image/') || !file.size) {
+        notifications.warning('El archivo seleccionado no es una imagen válida.')
+        return
+      }
       const image = await createImageBitmap(file)
       image.close()
       await savePhoto(file)
-      await load()
-      setMessage('Foto guardada en este dispositivo.')
+      notifications.success('Foto guardada en este dispositivo.')
+      try {
+        await load()
+      } catch {
+        notifications.error('La foto se guardó, pero no se pudo actualizar la galería.')
+      }
       if (navigator.storage?.persist) {
         try {
-          if (!(await navigator.storage.persist())) setMessage('Foto guardada. El navegador no garantizó almacenamiento persistente; no borres los datos del sitio.')
+          if (!(await navigator.storage.persist())) notifications.warning('El navegador no garantizó almacenamiento persistente; no borres los datos del sitio.')
         } catch {
-          setMessage('Foto guardada. No se pudo comprobar el almacenamiento persistente.')
+          notifications.warning('No se pudo comprobar el almacenamiento persistente. No borres los datos del sitio.')
         }
       }
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'No se pudo guardar la foto.')
+    } catch {
+      notifications.error('No se pudo guardar la foto. Inténtalo nuevamente.')
     } finally {
       setBusy(false)
     }
@@ -61,40 +78,46 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
     if (!selected.length || !window.confirm(`¿Eliminar ${selected.length} foto(s) de este dispositivo?`)) return
     try {
       await deletePhotos(selected)
+      setPhotos((current) => current.filter((photo) => !selected.includes(photo.id)))
       setDescriptions((current) => Object.fromEntries(
         Object.entries(current).filter(([id]) => !selected.includes(id)),
       ))
       setSelected([])
       setPreview(null)
-      await load()
-      setMessage('Fotos eliminadas de este dispositivo.')
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'No se pudieron eliminar las fotos.')
+      notifications.success('Fotos eliminadas de este dispositivo.')
+      try {
+        await load()
+      } catch {
+        setPhotosLoaded(false)
+        notifications.error('Las fotos se eliminaron, pero no se pudo actualizar la galería.')
+      }
+    } catch {
+      notifications.error('No se pudieron eliminar las fotos. Inténtalo nuevamente.')
     }
   }
 
   const share = async () => {
-    const extensions: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic' }
-    const prepared = prepareJornadaShare(photos, selected, descriptions)
-    const files = prepared.photos
-      .map((photo) => new File([photo.blob], `jornada-${photo.id}.${extensions[photo.blob.type] ?? 'img'}`,
-        { type: photo.blob.type || 'image/jpeg', lastModified: photo.createdAt }))
-    if (!files.length) {
-      setMessage('Selecciona al menos una foto.')
-      return
-    }
-    if (!navigator.share || !navigator.canShare?.({ files })) {
-      setMessage('Este navegador no permite compartir estas fotos. Usa un dispositivo compatible.')
-      return
-    }
     try {
+      const extensions: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic' }
+      const prepared = prepareJornadaShare(photos, selected, descriptions)
+      const files = prepared.photos
+        .map((photo) => new File([photo.blob], `jornada-${photo.id}.${extensions[photo.blob.type] ?? 'img'}`,
+          { type: photo.blob.type || 'image/jpeg', lastModified: photo.createdAt }))
+      if (!files.length) {
+        notifications.warning('Selecciona al menos una foto.')
+        return
+      }
+      if (!navigator.share || !navigator.canShare?.({ files })) {
+        notifications.warning('Este navegador no permite compartir estas fotos. Usa un dispositivo compatible.')
+        return
+      }
       await navigator.share({ files, title: 'Fotos de jornada', ...(prepared.text === undefined ? {} : { text: prepared.text }) })
-      setMessage('Se abrió el selector para compartir. Confirma el envío en WhatsApp.')
+      notifications.info('Se abrió el selector para compartir. Confirma el envío en WhatsApp.')
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        setMessage('No se compartieron las fotos.')
+        notifications.info('No se compartieron las fotos.')
       } else {
-        setMessage('No se pudo abrir el selector para compartir.')
+        notifications.error('No se pudieron preparar o compartir las fotos. Inténtalo nuevamente.')
       }
     }
   }
@@ -114,7 +137,12 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
         <Link to="/jornada/fotos">Mis fotos ({photos.length})</Link>
       </div>
       <p className="text-sm text-slate-600">Cualquier persona con acceso a este navegador puede ver las fotos locales. No borres los datos del sitio.</p>
-      {message && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">{message}</p>}
+      {loadingPhotos && <p role="status" className="text-sm text-slate-600">Cargando fotos...</p>}
+      {!loadingPhotos && !photosLoaded && <Button type="button" variant="secondary" onClick={() => {
+        setLoadingPhotos(true)
+        void load().catch(() => notifications.error('No se pudieron cargar las fotos. Inténtalo nuevamente.'))
+          .finally(() => setLoadingPhotos(false))
+      }}>Reintentar carga de fotos</Button>}
       {mode === 'camera' ? (
         <div className="surface-panel space-y-4 p-5">
           <p>Abre la cámara y guarda las fotos de tu jornada. Puedes repetir la captura.</p>
@@ -132,7 +160,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
             <Button type="button" disabled={!selected.length} onClick={() => void share()}>Compartir fotos</Button>
           </div>
           {!!selected.length && <p className="text-sm text-slate-600">Las descripciones son opcionales y se incluyen en un reporte numerado. Su recepción depende de la aplicación y del dispositivo.</p>}
-          {!photos.length && <p className="rounded-2xl bg-white p-5 text-slate-600">Todavía no hay fotos. Abre la cámara para empezar.</p>}
+          {photosLoaded && !photos.length && <p className="rounded-2xl bg-white p-5 text-slate-600">Todavía no hay fotos. Abre la cámara para empezar.</p>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((photo) => (
               <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">

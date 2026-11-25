@@ -3,6 +3,7 @@ import { apiRequest } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
+import { notifications } from '../services/notifications'
 import type { Role, UserRead } from '../types/api'
 
 type UserForm = { username: string; password: string; role_id: number }
@@ -55,9 +56,14 @@ export function UsersPage() {
       })
       setCreating(false)
       setForm({ username: '', password: '', role_id: roles[0]?.id ?? 0 })
-      load()
+      notifications.success('Usuario creado correctamente')
+      void load()
     } catch (err) {
-      setError((err as Error).message)
+      if (err instanceof Error && 'status' in err && err.status === 409 && err.message === 'El usuario ya existe') {
+        notifications.warning('Este usuario ya está registrado')
+      } else {
+        notifications.error('No se pudo crear el usuario. Inténtalo nuevamente')
+      }
     }
   }
 
