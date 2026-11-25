@@ -73,6 +73,14 @@ class AuthSession(Base):
     user: Mapped[User] = relationship(lazy="joined")
     last_activity: Mapped[datetime] = mapped_column("ultima_actividad", DateTime(timezone=True), default=now_utc, nullable=False)
     revoked: Mapped[bool] = mapped_column("revocada", Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column("creado_en", DateTime(timezone=True), default=now_utc)
+    expires_at: Mapped[datetime | None] = mapped_column("expira_en", DateTime(timezone=True))
+    refresh_hash: Mapped[str | None] = mapped_column("refresh_hash", String(64), unique=True)
+    refresh_expires_at: Mapped[datetime | None] = mapped_column("refresh_expira_en", DateTime(timezone=True))
+    previous_refresh_hash: Mapped[str | None] = mapped_column("refresh_anterior_hash", String(64))
+    refresh_generation: Mapped[int] = mapped_column("refresh_generacion", Integer, default=0, server_default=text("0"), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column("revocada_en", DateTime(timezone=True))
+    revoked_reason: Mapped[str | None] = mapped_column("revocada_motivo", String(80))
 
 
 class AuditEvent(Base):

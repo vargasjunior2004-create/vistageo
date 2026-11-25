@@ -6,11 +6,12 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, lazyload
 
 from app.database import get_db
 from app.models import AuditEvent, AuthSession, User, as_utc, now_utc
+from app.tokens import TokenError, decode_access_token, looks_like_jwt, session_idle_ttl
 
 ADMIN = "ADMINISTRADOR"
 OFFICIAL_ROLES = {ADMIN, "GERENCIA", "JEFE OPERATIVO", "JEFE TECNICO", "TECNICO"}
@@ -60,30 +61,78 @@ def require_permission_manager(user: User) -> None:
         raise HTTPException(status_code=403, detail="No autorizado")
 
 
+def _unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Sesión inválida o vencida",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _session_from_credentials(db: Session, token: str) -> AuthSession | None:
+    if looks_like_jwt(token):
+        try:
+            claims = decode_access_token(token)
+        except TokenError:
+            return None
+        session = db.scalar(
+            select(AuthSession)
+            .options(lazyload(AuthSession.user))
+            .where(AuthSession.id == claims.session_id)
+            .with_for_update(of=AuthSession)
+        )
+        if session is None or session.user_id != claims.subject:
+            return None
+        return session
+    return db.scalar(
+        select(AuthSession)
+        .options(lazyload(AuthSession.user))
+        .where(AuthSession.token_hash == token_hash(token))
+        .with_for_update(of=AuthSession)
+    )
+
+
+def _revoke_session(session: AuthSession, now, reason: str) -> None:
+    session.revoked = True
+    session.revoked_at = now
+    session.revoked_reason = reason
+
+
+def revoke_session(db: Session, session: AuthSession, reason: str, actor_id: int | None = None, target_id: int | None = None) -> None:
+    now = now_utc()
+    _revoke_session(session, now, reason)
+    db.add(AuditEvent(action="CIERRE_SESION", actor_id=actor_id, target_id=target_id, details={"motivo": reason, "sesion_id": session.id}))
+
+
+def revoke_all_sessions(db: Session, user_id: int, reason: str = "REVOCACION_MASIVA") -> None:
+    now = now_utc()
+    db.execute(
+        update(AuthSession)
+        .where(AuthSession.user_id == user_id, AuthSession.revoked.is_(False))
+        .values(revoked=True, revoked_at=now, revoked_reason=reason)
+    )
+
+
 def current_session(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
     user_activity: bool = Header(default=False, alias="X-Actividad-Usuario"),
 ) -> AuthSession:
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Sesión inválida o vencida",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    unauthorized = _unauthorized()
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise unauthorized
-    session = db.scalar(
-        select(AuthSession)
-        .options(lazyload(AuthSession.user))
-        .where(AuthSession.token_hash == token_hash(credentials.credentials))
-        .with_for_update(of=AuthSession)
-    )
+    session = _session_from_credentials(db, credentials.credentials)
     if session is None or session.revoked or not session.user.active:
         raise unauthorized
     now = now_utc()
-    if now - as_utc(session.last_activity) >= SESSION_IDLE:
-        session.revoked = True
-        db.add(AuditEvent(action="SESION_VENCIDA", actor_id=session.user_id, target_id=session.user_id))
+    if session.expires_at is not None and as_utc(session.expires_at) <= now:
+        _revoke_session(session, now, "EXPIRACION_ABSOLUTA")
+        db.add(AuditEvent(action="SESION_VENCIDA", actor_id=session.user_id, target_id=session.user_id, details={"motivo": "EXPIRACION_ABSOLUTA", "sesion_id": session.id}))
+        db.commit()
+        raise unauthorized
+    if now - as_utc(session.last_activity) >= session_idle_ttl():
+        _revoke_session(session, now, "INACTIVIDAD")
+        db.add(AuditEvent(action="SESION_VENCIDA", actor_id=session.user_id, target_id=session.user_id, details={"motivo": "INACTIVIDAD", "sesion_id": session.id}))
         db.commit()
         raise unauthorized
     if user_activity:

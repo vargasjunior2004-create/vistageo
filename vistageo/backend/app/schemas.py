@@ -77,6 +77,10 @@ class PasswordReset(RequestModel):
     _password = field_validator("temporary_password")(validate_secret)
 
 
+class RefreshRequest(RequestModel):
+    refresh_token: str = Field(min_length=1, max_length=4096)
+
+
 class RoleCreate(RequestModel):
     name: str = Field(min_length=1, max_length=80)
 
@@ -291,3 +295,11 @@ class LocationRevisionRead(BaseModel):
     registrado_en: datetime
     responsable_id: int | None
     cerrada: bool
+
+
+class SessionRead(BaseModel):
+    id: int
+    creado_en: datetime | None
+    ultima_actividad: datetime
+    expira_en: datetime | None
+    actual: bool

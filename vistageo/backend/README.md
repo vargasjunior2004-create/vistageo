@@ -14,12 +14,18 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-Configurar `DATABASE_URL` por un mecanismo seguro, con el esquema
-`postgresql+psycopg://` y TLS adecuado para el servidor. El backend y Alembic
-cargan `backend/.env` si existe; una variable de entorno ya definida tiene
-prioridad. El archivo está ignorado por Git y debe ser accesible solo al
-usuario autorizado. No guardar la URL real ni contraseñas en archivos
-versionados o registros.
+Copiar `backend/.env.example` como `backend/.env` y completar valores. Configurar
+`DATABASE_URL` por un mecanismo seguro, con el esquema `postgresql+psycopg://`
+y TLS adecuado para el servidor. El backend y Alembic cargan `backend/.env` si
+existe; una variable de entorno ya definida tiene prioridad. El archivo está
+ignorado por Git y debe ser accesible solo al usuario autorizado. No guardar
+la URL real ni contraseñas en archivos versionados o registros.
+
+Variables de seguridad relevantes: `JWT_SECRET` (obligatorio, >=32 chars),
+`VISTAGEO_EXPOSE_DOCS` (default `false`), `TRUSTED_HOSTS`,
+`FORCE_HTTPS`/`HSTS_ENABLED`, `TRUST_PROXY_HEADERS`, `MAX_REQUEST_BODY_BYTES`,
+`LOGIN_RATE_LIMIT_*`, `DB_CONNECT_TIMEOUT_SECONDS`, `DB_STATEMENT_TIMEOUT_MS`,
+`DB_SSLMODE`. Ver `backend/.env.example`.
 
 Para Supabase, utilizar `sslmode=verify-full` y `sslrootcert` apuntando al
 certificado raíz oficial descargado desde los ajustes de la base de datos.
@@ -276,50 +282,71 @@ argumentos, variables de entorno, ejemplos de código ni archivos.
 .venv/bin/uvicorn app.main:app
 ```
 
-Consultar la documentación interactiva en `/docs` en un entorno seguro.
-Utilizar HTTPS para credenciales y tokens; para una instalación compartida,
-no exponer el servicio directamente sin configurar su entorno de seguridad.
+La documentación interactiva (`/docs`, `/redoc`, `/openapi.json`) está
+deshabilitada por defecto; habilitarla solo en entornos seguros con
+`VISTAGEO_EXPOSE_DOCS=true`. Utilizar HTTPS para credenciales y tokens; para una
+instalación compartida, no exponer el servicio directamente sin configurar su
+entorno de seguridad.
 
 ## Autenticación
 
-`POST /auth/login` recibe `username` y `password` y devuelve un token Bearer.
-Las credenciales se convierten a mayúsculas Unicode; la contraseña se
-almacena como hash Argon2 y nunca se devuelve. El token es aleatorio, se
-almacena solo su huella y debe conservarse de forma segura. Para una
-contraseña temporal, la respuesta indica `must_change_password: true`: solo
-se permiten `/auth/me`, `/auth/password` y `/auth/logout` hasta cambiarla.
-Cambiar la contraseña revoca las sesiones y requiere iniciar sesión otra vez.
-Las cuentas nuevas creadas mediante `/usuarios` pueden usar su contraseña
-inicial sin cambiarla; el cambio propio es opcional. Esta regla no modifica
-cuentas existentes ni el cambio obligatorio tras un restablecimiento.
+`POST /auth/login` recibe `username` y `password` y devuelve `access_token`
+(JWT, corta duración), `refresh_token` (opaco, rotativo), `token_type`,
+`expires_in` y `must_change_password`. Las credenciales se convierten a
+mayúsculas Unicode; la contraseña se almacena como hash Argon2 y nunca se
+devuelve.
 
-Una sesión vence a los 10 minutos sin actividad. El cliente debe enviar
-`X-Actividad-Usuario: true` **solo** cuando una petición representa una
-acción deliberada del usuario. Las consultas automáticas no deben incluirlo;
-las solicitudes sin esa cabecera no prolongan la sesión. La API rechaza
-sesiones vencidas incluso si la interfaz sigue abierta.
+**Configuración requerida:** `JWT_SECRET` (mínimo 32 caracteres, aleatorio) debe
+estar definido en todos los entornos. Opcionales: `JWT_ISSUER`,
+`JWT_AUDIENCE`, `ACCESS_TOKEN_MINUTES` (15), `REFRESH_TOKEN_DAYS` (7),
+`SESSION_ABSOLUTE_HOURS` (168), `SESSION_IDLE_MINUTES` (10).
 
-`GET /auth/me` incluye el nombre y los permisos del rol propio, incluso
-durante el cambio obligatorio de contraseña, sin conceder acceso a `/roles`.
+El access token es un JWT firmado (HS256) con `sid/sub/jti/iat/exp/iss/aud/typ`.
+Se valida contra la sesión en PostgreSQL: si la sesión está revocada, vencida por
+expiración absoluta, inactiva o el usuario está desactivado, se rechaza. El
+refresh token es opaco, se almacena solo su hash SHA-256 y rota en cada
+`POST /auth/refresh`. La reutilización de un refresh anterior se detecta y
+revoca todas las sesiones del usuario (`REUTILIZACION_REFRESH`).
+
+Para una contraseña temporal, `must_change_password: true`: solo se permiten
+`/auth/me`, `/auth/password` y `/auth/logout` hasta cambiarla. Cambiar la
+contraseña o restablecerla administrativamente revoca sesiones. Las cuentas
+nuevas creadas mediante `/usuarios` pueden usar su contraseña inicial sin
+cambiarla; el cambio propio es opcional.
+
+Una sesión vence por inactividad (`SESSION_IDLE_MINUTES`, default 10). El cliente
+debe enviar `X-Actividad-Usuario: true` **solo** cuando una petición representa
+una acción deliberada del usuario. Las consultas automáticas no deben incluirlo.
+
+`GET /auth/me` incluye el nombre y los permisos del rol propio, incluso durante
+el cambio obligatorio de contraseña.
 
 Cinco intentos fallidos bloquean esa cuenta durante 15 minutos. Las respuestas
-de cuenta inexistente, desactivada, bloqueada o con contraseña incorrecta
-son iguales. Esta protección por cuenta puede ser usada para bloquear
-temporalmente a otra persona; monitorear los eventos. No limita intentos de
-nombres inexistentes ni sustituye una protección adicional de tráfico en el
-despliegue.
+de cuenta inexistente, desactivada, bloqueada o con contraseña incorrecta son
+iguales. Además, `/auth/login` tiene rate limiting por IP y por cuenta
+(configurable por `LOGIN_RATE_LIMIT_*`). Esta protección no sustituye WAF/proxy
+en despliegue.
+
+Los tokens opacos legados almacenados en `sesiones.token_hash` se aceptan hasta
+su expiración/inactividad para compatibilidad durante el despliegue.
 
 ## Endpoints
 
 | Método | Ruta | Uso |
 |---|---|---|
-| POST | `/auth/login` | Iniciar sesión. |
+| GET | `/health` | Verificación de salud (sin autenticación). |
+| POST | `/auth/login` | Iniciar sesión; devuelve access JWT + refresh. |
+| POST | `/auth/refresh` | Rotar refresh token y obtener nuevo access token. |
 | GET | `/auth/me` | Consultar la cuenta de la sesión. |
 | POST | `/auth/password` | Cambiar la contraseña propia. |
 | POST | `/auth/logout` | Revocar la sesión actual. |
+| GET | `/auth/sessions` | Listar sesiones activas propias. |
+| DELETE | `/auth/sessions/{id}` | Revocar una sesión propia. |
+| DELETE | `/auth/sessions` | Revocar todas las sesiones propias. |
 | GET, POST | `/usuarios` | Consultar o crear usuarios. |
 | GET, PATCH | `/usuarios/{id}` | Consultar o editar usuario, rol y estado. |
 | POST | `/usuarios/{id}/restablecer-contrasena` | Establecer contraseña temporal y revocar sesiones. |
+| POST | `/usuarios/{id}/revocar-sesiones` | Revocar sesiones de un usuario (admin/gestor autorizado). |
 | GET, POST | `/roles` | Listar o crear roles. |
 | PATCH | `/roles/{id}` | Renombrar un rol no protegido. |
 | GET | `/permisos` | Consultar el catálogo de permisos del módulo. |
@@ -386,7 +413,8 @@ La opción unificada conserva FastAPI y publica React y la API desde el mismo
 origen. El `Dockerfile` de `vistageo/` compila el frontend con
 `VITE_API_URL=/api`; `app.unified:app` monta la API bajo `/api`, sirve sus
 archivos estáticos y devuelve la aplicación para las rutas de React. La
-documentación de la API queda en `/api/docs`. Las URLs antiguas de API sin
+documentación de la API queda en `/api/docs` solo si `VISTAGEO_EXPOSE_DOCS=true`.
+Las URLs antiguas de API sin
 prefijo corresponden al modo separado descrito más abajo, no al unificado.
 Los archivos del service worker no cachean respuestas de `/api`.
 
@@ -668,13 +696,23 @@ de validación no devuelven los valores recibidos, para no reflejar contraseñas
 ## Límites pendientes
 
 - Las pruebas de la API utilizan SQLite en memoria; las de esquema requieren
-  PostgreSQL desechable. Las pruebas automatizadas simulan Storage y no
-  cubren todas las condiciones de concurrencia o fallos de producción.
-- Las diferencias de conversión Unicode entre el frontend y el backend
-  deben comprobarse antes de integrar la interfaz. El backend usa la
-  conversión Unicode de Python y no elimina espacios de las contraseñas.
-- Es necesario definir permisos mínimos de base de datos, TLS, despliegue y
-  retención de auditoría. El trigger de auditoría preparado para PostgreSQL
-  no impide que un propietario privilegiado lo deshabilite.
+  PostgreSQL desechable (`TEST_DATABASE_URL`). Las pruebas automatizadas simulan
+  Storage y no cubren todas las condiciones de concurrencia o fallos de producción.
+- El rate limiting de login es en memoria por proceso; en múltiples réplicas se
+  requiere limitación compartida en proxy/WAF/Redis. `TRUST_PROXY_HEADERS=true`
+  solo debe habilitarse detrás de un proxy confiable.
+- El refresh token se guarda en `localStorage` en el frontend; un XSS puede
+  robarlo. Mitigar con CSP, higiene de dependencias y revisión de XSS.
+- Las cabeceras de seguridad y CSP se envían desde la API; la CSP puede requerir
+  ajustes si se agregan recursos externos. HSTS/HTTPS redirect dependen de
+  `FORCE_HTTPS`/`HSTS_ENABLED` y configuración correcta del proxy.
+- La documentación interactiva está deshabilitada por defecto; no habilitar
+  `VISTAGEO_EXPOSE_DOCS` en producción.
+- El Dockerfile ejecuta como usuario no-root e incluye healthcheck, pero las
+  imágenes base están fijadas por tag; para mayor reproducibilidad fijar por
+  digest en el pipeline de despliegue.
+- Es necesario definir permisos mínimos de base de datos, TLS real, retención
+  de auditoría, respaldos y monitoreo. El trigger de auditoría preparado para
+  PostgreSQL no impide que un propietario privilegiado lo deshabilite.
 - La constitución existente aún debe reconciliar sus nombres de roles con los
   confirmados. La API no cambia automáticamente esa constitución.
