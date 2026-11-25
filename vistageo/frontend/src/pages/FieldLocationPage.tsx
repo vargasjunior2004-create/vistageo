@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { CameraInput } from '../components/CameraInput'
 import { Input } from '../components/Input'
+import { notifications } from '../services/notifications'
 import { GpsCapture, type GpsCaptureHandle } from '../components/GpsCapture'
 import { deleteDraft, getDraft, saveDraft, type LocationDraft } from '../services/localPhotos'
 import { encodeOfficialPhoto } from '../services/officialPhoto'
@@ -17,7 +18,7 @@ export function FieldLocationPage() {
   const [checked, setChecked] = useState<string | null>(null)
   const [location, setLocation] = useState<Location | null>(null)
   const [checking, setChecking] = useState(false)
-  const [checkError, setCheckError] = useState('')
+  const [checkError, setCheckError] = useState(false)
   const [retryCheck, setRetryCheck] = useState(0)
   const checkController = useRef<AbortController | null>(null)
   const [photo, setPhoto] = useState('')
@@ -50,9 +51,17 @@ export function FieldLocationPage() {
           if (controller.signal.aborted) return
           setLocation(locations[0] ?? null)
           setChecked(kardex)
+          if (locations[0]) {
+            notifications.warning('Este kardex ya tiene una ubicación registrada', 'consulta-kardex')
+          } else {
+            notifications.success('Kardex disponible para registrar ubicación', 'consulta-kardex')
+          }
         })
-        .catch((err: unknown) => {
-          if (!controller.signal.aborted) setCheckError(err instanceof Error ? err.message : 'No se pudo consultar el kardex.')
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setCheckError(true)
+            notifications.error('No se pudo consultar el kardex. Inténtalo nuevamente', 'consulta-kardex')
+          }
         })
         .finally(() => { if (!controller.signal.aborted) setChecking(false) })
     }, 350)
@@ -204,25 +213,21 @@ export function FieldLocationPage() {
           <Input label="Kardex exacto" value={kardex} disabled={busy} onChange={(event) => {
             const value = event.target.value
             checkController.current?.abort()
+            notifications.dismiss('consulta-kardex')
             setKardex(value); setChecked(null); setLocation(null); setPosition(null); setPhoto(''); setMethod(''); setSharedUrl(''); setConfirmed(false)
-            setError(''); setMessage(''); setCheckError(''); setChecking(value.length > 0)
+            setError(''); setMessage(''); setCheckError(false); setChecking(value.length > 0)
           }} required />
           {checking && <p role="status" className="mt-2 text-sm text-slate-600">Comprobando kardex...</p>}
-          {checkError && <div role="alert" className="mt-2 text-sm text-red-700">
-            <p>{checkError}</p>
-            <Button type="button" variant="secondary" onClick={() => { setCheckError(''); setChecking(true); setRetryCheck((value) => value + 1) }}>Reintentar</Button>
+          {checkError && <div className="mt-2">
+            <Button type="button" variant="secondary" onClick={() => { notifications.dismiss('consulta-kardex'); setCheckError(false); setChecking(true); setRetryCheck((value) => value + 1) }}>Reintentar consulta</Button>
           </div>}
         </div>
-      )}
-      {!draft && checked !== null && !location && (
-        <p className="rounded-xl bg-blue-50 p-4 text-blue-900">Este kardex está disponible para registrar una ubicación.</p>
       )}
       {!draft && location && (
         <div className="surface-panel space-y-3 p-5">
           <h2 className="font-semibold">Kardex: {location.kardex}</h2>
-          {!message && (location.registro_pendiente
-            ? <p>Este registro está pendiente o requiere revisión. Si tienes el borrador original, reinténtalo; de lo contrario, contacta a un administrador.</p>
-            : <p>Este kardex ya tiene una ubicación. No se creará un duplicado.</p>)}
+          {!message && !location.registro_pendiente && <span className="inline-block rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">Ubicación registrada</span>}
+          {!message && location.registro_pendiente && <p>Este registro está pendiente o requiere revisión. Si tienes el borrador original, reinténtalo; de lo contrario, contacta a un administrador.</p>}
         </div>
       )}
       {!draft && checked !== null && !location && (
