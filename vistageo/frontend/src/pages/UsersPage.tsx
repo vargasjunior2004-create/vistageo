@@ -3,6 +3,7 @@ import { apiRequest } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
+import { SkeletonTable } from '../components/Skeleton'
 import { notifications } from '../services/notifications'
 import type { Role, UserRead } from '../types/api'
 
@@ -16,6 +17,7 @@ export function UsersPage() {
   const [users, setUsers] = useState<UserRead[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<UserForm>({ username: '', password: '', role_id: 0 })
@@ -34,13 +36,14 @@ export function UsersPage() {
       setUsers(u)
       const official = r.filter((role) => ['ADMINISTRADOR', 'GERENCIA', 'JEFE OPERATIVO', 'JEFE TECNICO', 'TECNICO'].includes(role.name))
       setRoles(official)
-      if (!form.role_id && official.length) setForm((f) => ({ ...f, role_id: official[0].id }))
+      if (official.length) setForm((current) => current.role_id ? current : { ...current, role_id: official[0].id })
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setLoading(false)
+      setLoaded(true)
     }
-  }, [form.role_id, canListRoles])
+  }, [canListRoles])
 
   useEffect(() => {
     load()
@@ -183,9 +186,7 @@ export function UsersPage() {
         </form>
       )}
 
-      {loading ? (
-        <p className="text-slate-500">Cargando...</p>
-      ) : (
+      {loading && !loaded ? <div role="status" aria-label="Cargando usuarios"><SkeletonTable rows={5} columns={canManage ? 5 : 4} /></div> : (
         <div className="surface-panel overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-slate-600">
@@ -198,7 +199,7 @@ export function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {users.length === 0 && !error ? <tr><td colSpan={canManage ? 5 : 4} className="px-4 py-6 text-center text-slate-500">No hay usuarios registrados.</td></tr> : users.map((u) => (
                 <tr key={u.id} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
                   <td className="px-4 py-3">{u.id}</td>
                   <td className="px-4 py-3 font-medium">{u.username}</td>

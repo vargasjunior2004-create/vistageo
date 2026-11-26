@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { apiRequest } from '../api/client'
 import { gpsQuality, isGpsPositionValid, type GpsLimits, type GpsPosition } from '../services/gpsCapture'
 import { Button } from './Button'
+import { SkeletonText } from './Skeleton'
 
 type Props = {
   disabled: boolean
@@ -12,6 +13,7 @@ export type GpsCaptureHandle = { stop: () => void }
 
 export const GpsCapture = forwardRef<GpsCaptureHandle, Props>(function GpsCapture({ disabled, onChange }, ref) {
   const [limits, setLimits] = useState<GpsLimits | null>(null)
+  const [loadingConfig, setLoadingConfig] = useState(true)
   const [position, setPosition] = useState<GpsPosition | null>(null)
   const [status, setStatus] = useState('Preparando captura GPS...')
   const [searching, setSearching] = useState(false)
@@ -132,6 +134,7 @@ export const GpsCapture = forwardRef<GpsCaptureHandle, Props>(function GpsCaptur
       .catch((error: unknown) => {
         if (!controller.signal.aborted) setStatus(error instanceof Error ? error.message : 'No se pudo cargar la configuración GPS.')
       })
+      .finally(() => { if (!controller.signal.aborted) setLoadingConfig(false) })
     return () => {
       controller.abort(); stop()
       if (expiration.current !== null) window.clearTimeout(expiration.current)
@@ -147,6 +150,7 @@ export const GpsCapture = forwardRef<GpsCaptureHandle, Props>(function GpsCaptur
   }, [disabled])
 
   return <div className="surface-inset space-y-2 p-4">
+    {loadingConfig ? <div role="status" aria-label="Cargando configuración GPS"><SkeletonText lines={2} /></div> : <>
     <p role="status" className="text-sm">{status}</p>
     {position && limits && <>
       <p className="text-sm">{position.latitude}, {position.longitude} · Precisión estimada: {position.accuracy} m ({gpsQuality(position.accuracy, limits)})</p>
@@ -161,5 +165,6 @@ export const GpsCapture = forwardRef<GpsCaptureHandle, Props>(function GpsCaptur
         setSearching(false); setPosition(null); callback.current(null); setStatus('Captura cancelada.')
       }}>Cancelar captura</Button>}
     </div>}
+    </>}
   </div>
 })

@@ -3,6 +3,7 @@ import { apiRequest } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
+import { SkeletonCard } from '../components/Skeleton'
 import type { UpdateReason } from '../types/api'
 
 export function UpdateReasonsPage() {
@@ -72,7 +73,7 @@ export function UpdateReasonsPage() {
       <Button type="submit" disabled={busy || !name.trim()}>{editing ? 'Guardar cambios' : 'Agregar motivo'}</Button>
       {editing && <Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(null); setName('') }}>Cancelar</Button>}
     </form>
-    {loading ? <p>Cargando motivos...</p> : reasons.length === 0 ? <p>No hay motivos registrados.</p> :
+    {loading ? <div role="status" aria-label="Cargando motivos" className="space-y-2">{Array.from({ length: 3 }, (_, index) => <SkeletonCard key={index} rows={1} />)}</div> : reasons.length === 0 && !error ? <p>No hay motivos registrados.</p> :
       <ul className="space-y-2">{reasons.map((reason) => <li key={reason.id} className="surface-panel flex flex-wrap items-center justify-between gap-3 p-4">
         <div><p className="font-semibold">{reason.nombre}</p><p className="text-sm text-slate-600">{reason.activo ? 'Activo' : 'Inactivo'}</p></div>
         <div className="flex gap-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(reason); setName(reason.nombre) }}>Editar</Button>

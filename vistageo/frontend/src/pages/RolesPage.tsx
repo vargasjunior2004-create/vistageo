@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
+import { SkeletonCard } from '../components/Skeleton'
 import type { Role } from '../types/api'
 
 export function RolesPage() {
@@ -11,6 +12,7 @@ export function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [editingPerms, setEditingPerms] = useState<Role | null>(null)
   const [selectedPerms, setSelectedPerms] = useState<string[]>([])
@@ -29,6 +31,7 @@ export function RolesPage() {
       setError((err as Error).message)
     } finally {
       setLoading(false)
+      setLoaded(true)
     }
   }, [isManager])
 
@@ -60,11 +63,11 @@ export function RolesPage() {
       <h1 className="page-title">Roles y permisos</h1>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {loading ? (
-        <p className="text-slate-500">Cargando...</p>
-      ) : (
+      {loading && !loaded ? <div role="status" aria-label="Cargando roles" className="space-y-3">
+        {Array.from({ length: 3 }, (_, index) => <SkeletonCard key={index} rows={2} />)}
+      </div> : (
         <div className="space-y-3">
-          {roles.map((role) => (
+          {roles.length === 0 && !error ? <p className="rounded-xl bg-white p-5 text-slate-600">No hay roles disponibles.</p> : roles.map((role) => (
             <div key={role.id} className="surface-panel p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>

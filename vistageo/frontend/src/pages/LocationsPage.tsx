@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { LocationPhoto } from '../components/LocationPhoto'
+import { Skeleton, SkeletonCard } from '../components/Skeleton'
 import { UpdateLocation } from '../components/UpdateLocation'
 import type { Location, LocationRevision } from '../types/api'
 
@@ -13,8 +14,10 @@ export function LocationsPage() {
   const [locations, setLocations] = useState<Location[]>([])
   const [selected, setSelected] = useState<Location | null>(null)
   const [revisions, setRevisions] = useState<LocationRevision[]>([])
+  const [revisionsLoading, setRevisionsLoading] = useState(false)
   const [revisionVersion, setRevisionVersion] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [kardex, setKardex] = useState('')
   const [search, setSearch] = useState('')
@@ -38,7 +41,10 @@ export function LocationsPage() {
     } catch (err) {
       if (!signal?.aborted) setError((err as Error).message)
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+        setLoaded(true)
+      }
     }
   }, [filter, offset])
 
@@ -66,10 +72,12 @@ export function LocationsPage() {
     if (!selected) return
     const controller = new AbortController()
     setRevisions([])
+    setRevisionsLoading(true)
     setError('')
     apiRequest<LocationRevision[]>(`/ubicaciones/${selected.id}/revisiones`, { activity: true, signal: controller.signal })
       .then(setRevisions)
       .catch((err: Error) => { if (!controller.signal.aborted) setError(err.message) })
+      .finally(() => { if (!controller.signal.aborted) setRevisionsLoading(false) })
     return () => controller.abort()
   }, [selected, revisionVersion])
 
@@ -100,11 +108,11 @@ export function LocationsPage() {
         <Button type="submit">Crear ubicación</Button>
       </form>
 
-      {loading ? (
-        <p className="text-slate-500">Cargando...</p>
-      ) : (
+      {loading && !loaded ? <div role="status" aria-label="Cargando ubicaciones" className="grid gap-3 sm:grid-cols-2">
+        {Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} rows={2} />)}
+      </div> : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {locations.map((loc) => (
+          {locations.length === 0 && !error ? <p className="col-span-full rounded-xl bg-white p-5 text-slate-600">No se encontraron ubicaciones.</p> : locations.map((loc) => (
             <button
               key={loc.id}
               onClick={() => { setPhotoVersion(null); setSelected(loc) }}
@@ -134,8 +142,9 @@ export function LocationsPage() {
             canPhoto={hasPermission('ubicaciones.fotografia.editar')} canGps={hasPermission('ubicaciones.gps.editar')}
             onUpdated={() => void refreshSelected(selected.id)} />}
           <h3 className="font-semibold">Revisiones históricas</h3>
-          <ul className="space-y-2">
-            {revisions.map((r) => (
+          {revisionsLoading ? <div role="status" aria-label="Cargando revisiones históricas"><Skeleton className="h-16 w-full rounded-xl" /></div> : revisions.length === 0 && !error
+            ? <p className="text-sm text-slate-600">No hay revisiones históricas disponibles.</p>
+            : <ul className="space-y-2">{revisions.map((r) => (
               <li key={r.id} className="rounded-lg border border-slate-200 p-3 text-sm">
                 <p className="font-medium">#{r.id} {r.cerrada ? '(cerrada)' : ''}</p>
                 <p>Origen: {r.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : r.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
@@ -145,8 +154,7 @@ export function LocationsPage() {
                   {r.latitud ?? '—'}, {r.longitud ?? '—'} · {new Date(r.registrado_en).toLocaleString()}
                 </p>
               </li>
-            ))}
-          </ul>
+            ))}</ul>}
         </div>
       )}
     </div>

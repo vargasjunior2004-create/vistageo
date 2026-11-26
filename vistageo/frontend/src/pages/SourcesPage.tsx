@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiRequest } from '../api/client'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
+import { SkeletonCard } from '../components/Skeleton'
 import type { HistoricalSource } from '../types/api'
 
 export function SourcesPage() {
   const pageSize = 100
   const [items, setItems] = useState<HistoricalSource[]>([])
   const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [filters, setFilters] = useState({ carpeta: '', estado: '', kardex: '', tipo: '' })
   const [applied, setApplied] = useState(filters)
@@ -31,7 +33,10 @@ export function SourcesPage() {
     } catch (err) {
       if (!signal?.aborted) setError((err as Error).message)
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+        setLoaded(true)
+      }
     }
   }, [applied, offset])
 
@@ -75,11 +80,11 @@ export function SourcesPage() {
       </div>
       <Button onClick={() => { deliberateLoad.current = true; setOffset(0); setApplied({ ...filters }) }}>Filtrar</Button>
 
-      {loading ? (
-        <p className="text-slate-500">Cargando...</p>
-      ) : (
+      {loading && !loaded ? <div role="status" aria-label="Cargando procedencia histórica" className="space-y-2">
+        {Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} rows={2} />)}
+      </div> : (
         <div className="space-y-2">
-          {items.map((s) => (
+          {items.length === 0 && !error ? <p className="rounded-xl bg-white p-5 text-slate-600">No se encontraron registros de procedencia.</p> : items.map((s) => (
             <div key={s.id} className="surface-panel p-5">
               <p className="font-medium text-slate-900">#{s.id} · {s.tipo}</p>
               <p className="text-sm text-slate-600 break-all">{s.ruta_original}</p>

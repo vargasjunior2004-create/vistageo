@@ -1,16 +1,13 @@
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import { SkeletonDashboard } from '../components/Skeleton'
 
 export function ProtectedRoute({ children }: { children: React.JSX.Element }) {
   const { user, loading, error, passwordChanged, sessionExpired, refresh } = useAuth()
   const location = useLocation()
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-slate-600">
-        Cargando...
-      </div>
-    )
+    return <SkeletonDashboard />
   }
 
   if (error) {

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiRequest } from '../api/client'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
+import { SkeletonTable } from '../components/Skeleton'
 import type { Contract } from '../types/api'
 
 export function ContractsPage() {
   const pageSize = 100
   const [items, setItems] = useState<Contract[]>([])
   const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [kardex, setKardex] = useState('')
   const [search, setSearch] = useState('')
@@ -29,7 +31,10 @@ export function ContractsPage() {
     } catch (err) {
       if (!signal?.aborted) setError((err as Error).message)
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+        setLoaded(true)
+      }
     }
   }, [filter, offset])
 
@@ -67,16 +72,14 @@ export function ContractsPage() {
         </div>
         <Button type="submit">Crear</Button>
       </form>
-      {loading ? (
-        <p className="text-slate-500">Cargando...</p>
-      ) : (
+      {loading && !loaded ? <div role="status" aria-label="Cargando contratos"><SkeletonTable rows={5} columns={1} /></div> : (
         <div className="surface-panel overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-slate-600">
               <tr><th className="px-4 py-3">Kardex</th></tr>
             </thead>
             <tbody>
-              {items.map((c) => (
+              {items.length === 0 && !error ? <tr><td className="px-4 py-6 text-center text-slate-500">No se encontraron contratos.</td></tr> : items.map((c) => (
                 <tr key={c.kardex} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium">{c.kardex}</td>
                 </tr>

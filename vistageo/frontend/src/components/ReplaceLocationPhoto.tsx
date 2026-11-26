@@ -4,6 +4,7 @@ import { deletePhotoDraft, getPhotoDraft, savePhotoDraft, type PhotoReplacementD
 import { encodeOfficialPhoto } from '../services/officialPhoto'
 import { Button } from './Button'
 import { CameraInput } from './CameraInput'
+import { SkeletonText } from './Skeleton'
 
 type Props = {
   userId: number
@@ -103,7 +104,7 @@ export function ReplaceLocationPhoto({ userId, locationId, version, onUpdated }:
     }
   }
 
-  if (loadingDraft) return <p className="text-sm text-slate-500">Comprobando reemplazos pendientes...</p>
+  if (loadingDraft) return <div role="status" aria-label="Comprobando reemplazos pendientes"><SkeletonText lines={2} /></div>
   if (draftError) return <p role="alert" className="text-sm text-red-700">{draftError}</p>
   return (
     <div className="space-y-3 border-t border-slate-100 pt-4">

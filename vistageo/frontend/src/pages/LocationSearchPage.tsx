@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { LocationPhoto } from '../components/LocationPhoto'
+import { Skeleton, SkeletonCard } from '../components/Skeleton'
 import { UpdateLocation } from '../components/UpdateLocation'
 import { googleMapsLink } from '../services/maps'
 import type { Location, LocationRevision, LocationUpdateAudit } from '../types/api'
@@ -55,6 +56,7 @@ export function LocationSearchPage() {
   const [historyError, setHistoryError] = useState('')
   const [historyMore, setHistoryMore] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [revisionLoadingId, setRevisionLoadingId] = useState<number | null>(null)
   const [photoVersion, setPhotoVersion] = useState<string | null>(null)
   const [photoRevision, setPhotoRevision] = useState(0)
   const controllerRef = useRef<AbortController | null>(null)
@@ -125,9 +127,11 @@ export function LocationSearchPage() {
   useEffect(() => {
     if (selectedId === undefined || !selected?.revision_actual_id) return
     const controller = new AbortController()
+    setRevisionLoadingId(selectedId)
     apiRequest<LocationRevision[]>(`/ubicaciones/${selectedId}/revisiones?revision_id=${selected.revision_actual_id}`, { signal: controller.signal })
       .then((items) => { if (!controller.signal.aborted) setRevisionResult({ id: selectedId, revision: items[0] ?? null, error: '' }) })
       .catch((err: unknown) => { if (!controller.signal.aborted) setRevisionResult({ id: selectedId, revision: null, error: err instanceof Error ? err.message : 'No se pudo consultar la revisión.' }) })
+      .finally(() => { if (!controller.signal.aborted) setRevisionLoadingId(null) })
     return () => controller.abort()
   }, [selectedId, selected?.revision_actual_id])
 
@@ -213,6 +217,7 @@ export function LocationSearchPage() {
           <section className="space-y-2 border-t border-slate-100 pt-4">
             <h3 className="font-semibold">Historial de actualizaciones</h3>
             {revisionError && <p role="alert" className="text-sm text-red-700">{revisionError}</p>}
+            {revisionLoadingId === selectedId && <div role="status" aria-label="Cargando revisión histórica"><Skeleton className="h-16 w-full rounded-xl" /></div>}
             {registrationRevision && <div className="surface-inset p-3 text-sm">
               <p className="font-semibold">Revisión histórica vinculada</p>
               <p>Origen: {registrationRevision.metodo_coordenadas === 'GPS_DISPOSITIVO' ? 'GPS del dispositivo' : registrationRevision.metodo_coordenadas === 'ENLACE_COMPARTIDO' ? 'Enlace compartido' : 'Desconocido'}</p>
@@ -221,7 +226,7 @@ export function LocationSearchPage() {
               {registrationRevision.url_gps && <p className="break-all">Enlace original: {registrationRevision.url_gps}</p>}
             </div>}
             {historyError && <p role="alert" className="text-sm text-red-700">{historyError}</p>}
-            {historyLoading && <p role="status" className="text-sm text-slate-500">Cargando historial...</p>}
+            {historyLoading && history.length === 0 && !historyError && <div role="status" aria-label="Cargando historial"><SkeletonCard rows={3} /></div>}
             {!historyLoading && history.length === 0 && !historyError && <p className="text-sm text-slate-600">Aún no hay actualizaciones registradas.</p>}
             <ul className="space-y-2">{history.map((item) =>             <li key={item.id} className="surface-inset p-3 text-sm">
               <p className="font-semibold">{item.motivo}</p>
@@ -237,6 +242,9 @@ export function LocationSearchPage() {
       ) : query.length > 0 && (
         <section aria-label="Coincidencias de kardex" className="space-y-3">
           {results.length > 0 && <p className="text-sm font-semibold text-slate-600">Coincidencias {hasMore ? 'encontradas hasta ahora' : 'encontradas'}: {results.length}</p>}
+          {loading && results.length === 0 && !error && <div role="status" aria-label="Buscando coincidencias" className="space-y-2">
+            {Array.from({ length: 3 }, (_, index) => <SkeletonCard key={index} rows={2} />)}
+          </div>}
           <ul className="space-y-2">
             {results.map((location) => (
               <li key={location.id}>
@@ -259,7 +267,7 @@ export function LocationSearchPage() {
               </li>
             ))}
           </ul>
-          {loading && <p role="status" className="text-sm text-slate-500">Buscando coincidencias...</p>}
+          {loading && results.length > 0 && <div role="status" aria-label="Cargando más coincidencias"><Skeleton className="h-16 w-full rounded-xl" /></div>}
           {error && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700"><p>{error}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => { setError(''); setLoading(true); setRetry((value) => value + 1) }}>Reintentar</Button></div>}
           {!loading && !error && results.length === 0 && <p className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">No se encontraron coincidencias para este kardex.</p>}
           {hasMore && !error && <div ref={sentinel} aria-hidden="true" />}

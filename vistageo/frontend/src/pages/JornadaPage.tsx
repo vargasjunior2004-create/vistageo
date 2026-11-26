@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { CameraInput } from '../components/CameraInput'
+import { SkeletonImage } from '../components/Skeleton'
 import { notifications } from '../services/notifications'
 import { deletePhotos, listPhotos, savePhoto, type JornadaPhoto } from '../services/localPhotos'
 import { prepareJornadaShare } from '../services/jornadaShare'
@@ -137,7 +138,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
         <Link to="/jornada/fotos">Mis fotos ({photos.length})</Link>
       </div>
       <p className="text-sm text-slate-600">Cualquier persona con acceso a este navegador puede ver las fotos locales. No borres los datos del sitio.</p>
-      {loadingPhotos && <p role="status" className="text-sm text-slate-600">Cargando fotos...</p>}
+      {loadingPhotos && !photosLoaded && <div role="status" aria-label="Cargando fotos" className="sr-only">Cargando fotos...</div>}
       {!loadingPhotos && !photosLoaded && <Button type="button" variant="secondary" onClick={() => {
         setLoadingPhotos(true)
         void load().catch(() => notifications.error('No se pudieron cargar las fotos. Inténtalo nuevamente.'))
@@ -147,7 +148,9 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
         <div className="surface-panel space-y-4 p-5">
           <p>Abre la cámara y guarda las fotos de tu jornada. Puedes repetir la captura.</p>
           <CameraInput disabled={busy} onPhoto={(file) => void capture(file)} />
-          {photos[0] && <div className="h-52 overflow-hidden rounded-xl"><PhotoThumbnail photo={photos[0]} /></div>}
+          {loadingPhotos && !photosLoaded
+            ? <div role="status" aria-label="Cargando fotografía reciente"><SkeletonImage className="h-52 rounded-xl" aspectRatio="4 / 3" /></div>
+            : photos[0] && <div className="h-52 overflow-hidden rounded-xl"><PhotoThumbnail photo={photos[0]} /></div>}
           <p><Link className="font-semibold text-blue-700" to="/jornada/fotos">Ver mis fotos →</Link></p>
         </div>
       ) : (
@@ -162,7 +165,9 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
           {!!selected.length && <p className="text-sm text-slate-600">Las descripciones son opcionales y se incluyen en un reporte numerado. Su recepción depende de la aplicación y del dispositivo.</p>}
           {photosLoaded && !photos.length && <p className="rounded-2xl bg-white p-5 text-slate-600">Todavía no hay fotos. Abre la cámara para empezar.</p>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {photos.map((photo) => (
+            {loadingPhotos && !photosLoaded
+              ? Array.from({ length: 8 }, (_, index) => <SkeletonImage key={index} className="h-36 rounded-xl border border-slate-200" aspectRatio="1 / 1" />)
+              : photos.map((photo) => (
               <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                 <button type="button" onClick={() => setPreview(photo)} className="block h-36 w-full" aria-label="Ampliar foto">
                   <PhotoThumbnail photo={photo} />

@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/Button'
 import { CameraInput } from '../components/CameraInput'
 import { Input } from '../components/Input'
+import { Skeleton, SkeletonCard } from '../components/Skeleton'
 import { notifications } from '../services/notifications'
 import { GpsCapture, type GpsCaptureHandle } from '../components/GpsCapture'
 import { deleteDraft, getDraft, saveDraft, type LocationDraft } from '../services/localPhotos'
@@ -28,6 +29,7 @@ export function FieldLocationPage() {
   const [confirmed, setConfirmed] = useState(false)
   const gpsCapture = useRef<GpsCaptureHandle>(null)
   const [draft, setDraft] = useState<LocationDraft | null>(null)
+  const [loadingDraft, setLoadingDraft] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -38,6 +40,7 @@ export function FieldLocationPage() {
     if (!user) return
     getDraft(user.id).then((value) => setDraft(value ?? null))
       .catch((err: Error) => setError(err.message))
+      .finally(() => setLoadingDraft(false))
   }, [user])
 
   useEffect(() => {
@@ -178,7 +181,7 @@ export function FieldLocationPage() {
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
       {message && <p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-800">{message}</p>}
       {busy && <p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-800">{saving ? 'Guardando domicilio...' : 'Procesando, espera un momento...'}</p>}
-      {draft ? (
+      {loadingDraft ? <div role="status" aria-label="Cargando borrador local"><SkeletonCard rows={4} /></div> : draft ? (
         <div className="surface-panel space-y-3 border-amber-200 bg-amber-50 p-5">
           <p>Hay un registro pendiente para <strong>{draft.kardex}</strong>. Reintenta con los mismos datos.</p>
           {!draft.metodo_coordenadas && <div className="space-y-3">
@@ -217,7 +220,7 @@ export function FieldLocationPage() {
             setKardex(value); setChecked(null); setLocation(null); setPosition(null); setPhoto(''); setMethod(''); setSharedUrl(''); setConfirmed(false)
             setError(''); setMessage(''); setCheckError(false); setChecking(value.length > 0)
           }} required />
-          {checking && <p role="status" className="mt-2 text-sm text-slate-600">Comprobando kardex...</p>}
+          {checking && <div role="status" aria-label="Comprobando kardex" className="mt-3"><Skeleton className="h-4 w-48 rounded-md" /></div>}
           {checkError && <div className="mt-2">
             <Button type="button" variant="secondary" onClick={() => { notifications.dismiss('consulta-kardex'); setCheckError(false); setChecking(true); setRetryCheck((value) => value + 1) }}>Reintentar consulta</Button>
           </div>}

@@ -49,6 +49,12 @@ datos automáticamente.
 
 ## Notas
 
+- Los placeholders reutilizables están en `src/components/Skeleton.tsx`:
+  `Skeleton`, `SkeletonText`, `SkeletonCard`, `SkeletonTable`, `SkeletonAvatar`,
+  `SkeletonImage` y `SkeletonDashboard`. Las pantallas muestran skeletons en la
+  carga inicial; al actualizar, conservan los resultados existentes y mantienen
+  visibles los estados de error y sin resultados. El shimmer respeta
+  `prefers-reduced-motion`; la aplicación actualmente usa tema claro.
 - El access token JWT se mantiene en memoria; el refresh token se guarda en
   `localStorage`. Al expirar el access token, el cliente intenta refrescar una
   vez; si la sesión ya no es válida, limpia la sesión y redirige al inicio.

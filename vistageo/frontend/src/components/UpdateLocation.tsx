@@ -9,6 +9,7 @@ import type { Location, UpdateReason } from '../types/api'
 import { Button } from './Button'
 import { CameraInput } from './CameraInput'
 import { GpsCapture } from './GpsCapture'
+import { SkeletonText } from './Skeleton'
 import type { GpsPosition } from '../services/gpsCapture'
 
 type Props = {
@@ -28,6 +29,7 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
   const [canDiscard, setCanDiscard] = useState(false)
   const [editing, setEditing] = useState(false)
   const [reasons, setReasons] = useState<UpdateReason[]>([])
+  const [loadingReasons, setLoadingReasons] = useState(false)
   const [reasonId, setReasonId] = useState('')
   const [observation, setObservation] = useState('')
   const [photo, setPhoto] = useState('')
@@ -49,6 +51,7 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
   const open = async () => {
     setError('')
     setBusy(true)
+    setLoadingReasons(true)
     try {
       setReasons(await apiRequest<UpdateReason[]>('/motivos-actualizacion'))
       setEditing(true)
@@ -56,6 +59,7 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los motivos.')
     } finally {
       setBusy(false)
+      setLoadingReasons(false)
     }
   }
 
@@ -145,7 +149,7 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">Comprobando actualizaciones pendientes...</p>
+  if (loading) return <div role="status" aria-label="Comprobando actualizaciones pendientes"><SkeletonText lines={2} /></div>
   if (draftsUnavailable) return <p role="alert" className="text-sm text-red-700">{error}</p>
   return <section className="space-y-3 border-t border-slate-100 pt-4">
     {message && <p role="status" className="text-sm text-blue-800">{message}</p>}
@@ -183,6 +187,7 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
       </label>
       <div className="flex flex-wrap gap-2"><Button type="button" disabled={busy || !reasonId || (!photo && !position && !legacy) || (!!position && !position.acceptable)} onClick={() => void confirm()}>Guardar actualización</Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(false); setPhoto(''); setPosition(null); setCapturingGps(false); setError('') }}>Cancelar</Button></div>
-    </> : <Button type="button" variant="secondary" disabled={busy || (!canGps && (!canPhoto || !photoVersion))} onClick={() => void open()}>Actualizar fachada o GPS</Button>}
+    </> : loadingReasons ? <div role="status" aria-label="Cargando motivos de actualización"><SkeletonText lines={2} /></div>
+      : <Button type="button" variant="secondary" disabled={busy || (!canGps && (!canPhoto || !photoVersion))} onClick={() => void open()}>Actualizar fachada o GPS</Button>}
   </section>
 }
