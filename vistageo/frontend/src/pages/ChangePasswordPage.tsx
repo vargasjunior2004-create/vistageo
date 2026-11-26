@@ -44,7 +44,7 @@ export function ChangePasswordPage() {
         <Input label="Contraseña actual" type="password" value={current} onChange={(e) => setCurrent(e.target.value.toUpperCase())} required />
         <Input label="Nueva contraseña" type="password" value={next} onChange={(e) => setNext(e.target.value.toUpperCase())} required />
         <Input label="Confirmar nueva contraseña" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value.toUpperCase())} required />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="alert alert-error">{error}</p>}
         <Button type="submit" disabled={loading}>{loading ? 'Guardando...' : 'Guardar'}</Button>
       </form>
     </div>

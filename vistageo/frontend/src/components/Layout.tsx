@@ -89,7 +89,7 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
   }
 
   return (
-    <div className="min-h-screen lg:flex">
+    <div className="min-h-screen bg-background lg:flex">
       {open && <button type="button" aria-label="Cerrar menú" onClick={closeMenu} className="fixed inset-0 z-40 bg-slate-950/60 lg:hidden" />}
       <aside
         ref={sidebar}
@@ -97,11 +97,11 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
         role={open ? 'dialog' : undefined}
         aria-modal={open ? true : undefined}
         aria-label="Navegación principal"
-        className={`${open ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-50 w-[min(19rem,85vw)] flex-col bg-[#102c50] text-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:shrink-0 ${collapsed ? 'lg:w-20' : 'lg:w-64'}`}
+        className={`app-sidebar ${open ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-50 w-[min(19rem,85vw)] flex-col shadow-2xl lg:sticky lg:top-0 lg:flex lg:h-screen lg:shrink-0 lg:shadow-none ${collapsed ? 'lg:w-20' : 'lg:w-64'}`}
       >
         <div className={`flex min-h-20 items-center gap-3 border-b border-white/10 px-5 ${collapsed ? 'lg:justify-center lg:px-3' : ''}`}>
           <Link to="/" onClick={() => setOpen(false)} aria-label="VISTA GEO, inicio" className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#2f6ecb] text-white"><Icon name="locations" className="h-5 w-5" /></span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-action text-white"><Icon name="locations" className="h-5 w-5" /></span>
             <span className={`min-w-0 ${collapsed ? 'lg:sr-only' : ''}`}>
               <span className="block text-base font-semibold tracking-[0.03em]">VISTA GEO</span>
               <span className="block text-[11px] text-blue-200">Grupo Vista</span>
@@ -114,7 +114,7 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-6" aria-label="Secciones">
           {groups.filter((group) => group.items.length > 0).map((group) => (
             <div key={group.label}>
-              <p className={`mb-2 px-3 text-xs font-medium text-blue-200/80 ${collapsed ? 'lg:sr-only' : ''}`}>{group.label}</p>
+              <p className={`mb-2 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-blue-200/80 ${collapsed ? 'lg:sr-only' : ''}`}>{group.label}</p>
               <ul className="space-y-1">
                 {group.items.map((item) => (
                   <li key={item.to}>
@@ -123,7 +123,7 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
                       end={item.to === '/'}
                       onClick={() => setOpen(false)}
                       title={collapsed ? item.label : undefined}
-                      className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-md border-l-2 px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:min-h-9 ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${isActive ? 'border-[#7ba9e8] bg-white/10 text-white' : 'border-transparent text-blue-100 hover:bg-white/5 hover:text-white'}`}
+                      className={({ isActive }) => `nav-link flex items-center gap-3 rounded-lg px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:min-h-10 ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${isActive ? 'nav-link-active' : ''}`}
                     >
                       <Icon name={item.icon} className="h-5 w-5 shrink-0" />
                       <span className={collapsed ? 'lg:sr-only' : ''}>{item.label}</span>
@@ -137,35 +137,35 @@ export function Layout({ children, local = false }: { children: React.ReactNode;
         <div className="border-t border-white/10 p-3">
           {user ? <>
             <div className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-medium">{user.username.slice(0, 2)}</span>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">{user.username.slice(0, 2)}</span>
               <span className={`min-w-0 ${collapsed ? 'lg:sr-only' : ''}`}>
                 <span className="block truncate text-sm font-semibold">{user.username}</span>
                 <span className="block truncate text-xs text-blue-200">{user.role_name}</span>
               </span>
             </div>
-            <Link to="/cambiar-contrasena" onClick={() => setOpen(false)} title={collapsed ? 'Cambiar contraseña' : undefined} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+            <Link to="/cambiar-contrasena" onClick={() => setOpen(false)} title={collapsed ? 'Cambiar contraseña' : undefined} className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-blue-100 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
               <Icon name="roles" className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:sr-only' : ''}>Cambiar contraseña</span>
             </Link>
-            <button type="button" onClick={() => void signOut()} title={collapsed ? 'Cerrar sesión' : undefined} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+            <button type="button" onClick={() => void signOut()} title={collapsed ? 'Cerrar sesión' : undefined} className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-blue-100 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
               <Icon name="logout" className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:sr-only' : ''}>Cerrar sesión</span>
             </button>
           </> : <Link to="/login" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-blue-100 hover:bg-white/10">Iniciar sesión</Link>}
-          <button type="button" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'} title={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'} className={`mt-1 hidden min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm text-blue-200 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white lg:flex ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+          <button type="button" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'} title={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'} className={`mt-1 hidden min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-blue-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white lg:flex ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
             <Icon name={collapsed ? 'expand' : 'collapse'} className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:sr-only' : ''}>Contraer barra</span>
           </button>
         </div>
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:px-7 lg:px-10">
-          <button ref={menuButton} type="button" onClick={() => setOpen(true)} aria-label="Abrir menú" aria-expanded={open} aria-controls="navegacion-principal" className="flex h-11 w-11 items-center justify-center rounded-xl text-[#102c50] hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-700 lg:hidden">
+        <header className="app-header sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b px-4 sm:px-7 lg:px-10">
+          <button ref={menuButton} type="button" onClick={() => setOpen(true)} aria-label="Abrir menú" aria-expanded={open} aria-controls="navegacion-principal" className="flex h-12 w-12 items-center justify-center rounded-xl text-primary transition-colors hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-action lg:hidden">
             <Icon name="menu" className="h-6 w-6" />
           </button>
-          <span className="text-sm font-semibold tracking-[0.03em] text-[#102c50] lg:hidden">VISTA GEO</span>
+          <span className="text-sm font-bold tracking-[0.05em] text-primary lg:hidden">VISTA GEO</span>
           <span className="hidden text-sm font-medium text-slate-500 lg:block">Grupo Vista <span className="mx-2 text-slate-300">/</span> Panel de trabajo</span>
           {local && <span className="ml-auto text-xs font-medium text-slate-500">Fotos en este dispositivo</span>}
         </header>
         <main className="mx-auto w-full max-w-[90rem] px-4 py-6 sm:px-7 sm:py-8 lg:px-8">
-          {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="alert alert-error mb-4">{error}</p>}
           {children}
         </main>
       </div>

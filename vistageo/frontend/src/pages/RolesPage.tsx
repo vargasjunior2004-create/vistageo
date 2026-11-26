@@ -61,13 +61,13 @@ export function RolesPage() {
   return (
     <div className="space-y-4">
       <h1 className="page-title">Roles y permisos</h1>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
 
       {loading && !loaded ? <div role="status" aria-label="Cargando roles" className="space-y-3">
         {Array.from({ length: 3 }, (_, index) => <SkeletonCard key={index} rows={2} />)}
       </div> : (
         <div className="space-y-3">
-          {roles.length === 0 && !error ? <p className="rounded-xl bg-white p-5 text-slate-600">No hay roles disponibles.</p> : roles.map((role) => (
+          {roles.length === 0 && !error ? <p className="empty-state">No hay roles disponibles.</p> : roles.map((role) => (
             <div key={role.id} className="surface-panel p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>

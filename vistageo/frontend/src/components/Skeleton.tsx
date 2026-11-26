@@ -43,7 +43,7 @@ export function SkeletonCard({ rows = 3, image = false, className = '' }: Skelet
 export function SkeletonTable({ rows = 5, columns = 4 }: { rows?: number; columns?: number }) {
   return (
     <div aria-hidden="true" className="surface-panel overflow-x-auto">
-      <table className="min-w-full text-sm">
+      <table className="data-table min-w-full text-sm">
         <thead className="bg-slate-50">
           <tr>
             {Array.from({ length: columns }, (_, column) => (
@@ -73,7 +73,7 @@ export function SkeletonDashboard() {
   return (
     <div role="status" aria-label="Cargando aplicación" className="min-h-screen bg-slate-50 lg:flex">
       <span className="sr-only">Cargando aplicación...</span>
-      <aside aria-hidden="true" className="hidden w-64 shrink-0 flex-col gap-8 bg-[#102c50] p-5 lg:flex">
+      <aside aria-hidden="true" className="app-sidebar hidden w-64 shrink-0 flex-col gap-8 p-5 lg:flex">
         <Skeleton className="skeleton-on-brand h-10 w-40 rounded-lg" />
         <div className="space-y-3">
           {Array.from({ length: 5 }, (_, index) => (

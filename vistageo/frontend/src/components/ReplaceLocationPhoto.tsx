@@ -105,12 +105,12 @@ export function ReplaceLocationPhoto({ userId, locationId, version, onUpdated }:
   }
 
   if (loadingDraft) return <div role="status" aria-label="Comprobando reemplazos pendientes"><SkeletonText lines={2} /></div>
-  if (draftError) return <p role="alert" className="text-sm text-red-700">{draftError}</p>
+  if (draftError) return <p role="alert" className="alert alert-error">{draftError}</p>
   return (
     <div className="space-y-3 border-t border-slate-100 pt-4">
       {busy && <p role="status" className="text-sm text-slate-500">Procesando fotografía...</p>}
       {message && <p role="status" className="text-sm text-blue-800">{message}</p>}
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
       {draft ? <>
         <p className="text-sm text-amber-800">Hay un reemplazo pendiente para esta ubicación. Reintenta con la misma foto.</p>
         <img className="max-h-48 rounded-xl" src={`data:image/jpeg;base64,${draft.fotografia_base64}`} alt="Foto pendiente de reemplazo" />

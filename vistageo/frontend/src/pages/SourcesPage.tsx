@@ -71,7 +71,7 @@ export function SourcesPage() {
   return (
     <div className="space-y-4">
       <h1 className="page-title">Procedencia histórica</h1>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
       <div className="surface-panel grid gap-3 p-5 sm:grid-cols-4">
         <Input label="Carpeta" value={filters.carpeta} onChange={(e) => setFilters({ ...filters, carpeta: e.target.value })} />
         <Input label="Estado" value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })} />
@@ -84,7 +84,7 @@ export function SourcesPage() {
         {Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} rows={2} />)}
       </div> : (
         <div className="space-y-2">
-          {items.length === 0 && !error ? <p className="rounded-xl bg-white p-5 text-slate-600">No se encontraron registros de procedencia.</p> : items.map((s) => (
+          {items.length === 0 && !error ? <p className="empty-state">No se encontraron registros de procedencia.</p> : items.map((s) => (
             <div key={s.id} className="surface-panel p-5">
               <p className="font-medium text-slate-900">#{s.id} · {s.tipo}</p>
               <p className="text-sm text-slate-600 break-all">{s.ruta_original}</p>

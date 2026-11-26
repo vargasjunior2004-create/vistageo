@@ -117,7 +117,7 @@ export function UsersPage() {
         )}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
       {canManage && !canListRoles && <p className="text-sm text-slate-600">Para crear usuarios o cambiar roles se requiere acceso a la lista de roles.</p>}
 
       {creating && (
@@ -128,7 +128,7 @@ export function UsersPage() {
           {canListRoles && <label className="block">
             <span className="mb-1 block text-sm font-medium text-slate-700">Rol</span>
             <select
-              className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15"
+              className="min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:border-action focus:outline-none focus:ring-2 focus:ring-action/15"
               value={form.role_id}
               onChange={(e) => setForm({ ...form, role_id: Number(e.target.value) })}
             >
@@ -151,7 +151,7 @@ export function UsersPage() {
           {canListRoles && <label className="block">
             <span className="mb-1 block text-sm font-medium text-slate-700">Rol</span>
             <select
-              className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15"
+              className="min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:border-action focus:outline-none focus:ring-2 focus:ring-action/15"
               value={editing.role_id}
               onChange={(e) => setEditing({ ...editing, role_id: Number(e.target.value) })}
             >
@@ -188,8 +188,8 @@ export function UsersPage() {
 
       {loading && !loaded ? <div role="status" aria-label="Cargando usuarios"><SkeletonTable rows={5} columns={canManage ? 5 : 4} /></div> : (
         <div className="surface-panel overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-slate-600">
+          <table className="data-table min-w-full text-sm">
+            <thead>
               <tr>
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">Usuario</th>
@@ -199,18 +199,18 @@ export function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.length === 0 && !error ? <tr><td colSpan={canManage ? 5 : 4} className="px-4 py-6 text-center text-slate-500">No hay usuarios registrados.</td></tr> : users.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
-                  <td className="px-4 py-3">{u.id}</td>
-                  <td className="px-4 py-3 font-medium">{u.username}</td>
-                  <td className="px-4 py-3">{roleName(u.role_id)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${u.active ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+              {users.length === 0 && !error ? <tr><td colSpan={canManage ? 5 : 4}><p className="empty-state">No hay usuarios registrados.</p></td></tr> : users.map((u) => (
+                <tr key={u.id}>
+                  <td>{u.id}</td>
+                  <td className="font-medium">{u.username}</td>
+                  <td>{roleName(u.role_id)}</td>
+                  <td>
+                    <span className={`status-badge ${u.active ? 'status-badge-success' : 'status-badge-danger'}`}>
                       {u.active ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
                   {canManage && (
-                    <td className="px-4 py-3">
+                    <td>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="secondary" onClick={() => setEditing(u)}>Editar</Button>
                         <Button variant="ghost" onClick={() => setResetting(u)}>Reset</Button>

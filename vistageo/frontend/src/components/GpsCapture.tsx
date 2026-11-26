@@ -155,7 +155,7 @@ export const GpsCapture = forwardRef<GpsCaptureHandle, Props>(function GpsCaptur
     {position && limits && <>
       <p className="text-sm">{position.latitude}, {position.longitude} · Precisión estimada: {position.accuracy} m ({gpsQuality(position.accuracy, limits)})</p>
       {position.accuracy > limits.aceptable
-        ? <p role="alert" className="text-sm text-amber-800">Precisión insuficiente. Espera o repite la captura; no se puede guardar este punto.</p>
+        ? <p role="alert" className="alert alert-warning">Precisión insuficiente. Espera o repite la captura; no se puede guardar este punto.</p>
         : <p className="text-sm text-slate-600">Precisión aceptable. Puedes confirmar o esperar una mejor señal.</p>}
     </>}
     {limits && <div className="flex flex-wrap gap-2">

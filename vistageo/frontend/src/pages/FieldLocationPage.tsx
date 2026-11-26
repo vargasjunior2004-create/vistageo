@@ -175,14 +175,14 @@ export function FieldLocationPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <Link to="/" className="text-sm font-semibold text-blue-700">← Volver al panel</Link>
       <header className="space-y-1">
-        <p className="text-sm font-medium text-[#2f6ecb]">Ubicación oficial</p>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-action-strong">Ubicación oficial</p>
         <h1 className="page-title">Registrar ubicación</h1>
       </header>
-      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
-      {message && <p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-800">{message}</p>}
-      {busy && <p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-800">{saving ? 'Guardando domicilio...' : 'Procesando, espera un momento...'}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
+      {message && <p role="status" className="alert alert-info">{message}</p>}
+      {busy && <p role="status" className="alert alert-info">{saving ? 'Guardando domicilio...' : 'Procesando, espera un momento...'}</p>}
       {loadingDraft ? <div role="status" aria-label="Cargando borrador local"><SkeletonCard rows={4} /></div> : draft ? (
-        <div className="surface-panel space-y-3 border-amber-200 bg-amber-50 p-5">
+        <div className="alert alert-warning space-y-3 p-5">
           <p>Hay un registro pendiente para <strong>{draft.kardex}</strong>. Reintenta con los mismos datos.</p>
           {!draft.metodo_coordenadas && <div className="space-y-3">
             <p>Este borrador anterior no indica el origen. Selecciona cómo obtuviste esas coordenadas y confirma el punto antes de reintentar.</p>
@@ -191,7 +191,7 @@ export function FieldLocationPage() {
             {method === 'ENLACE_COMPARTIDO' && <>
               <Input label="Enlace compartido" value={sharedUrl} disabled={busy} onChange={(event) => { setSharedUrl(event.target.value); setPosition(null); setConfirmed(false) }} />
               <Button type="button" variant="secondary" disabled={busy || !sharedUrl} onClick={() => void interpret()}>Comprobar enlace</Button>
-              {position && (position.latitude !== Number(draft.latitud) || position.longitude !== Number(draft.longitud)) && <p role="alert">El enlace no coincide con las coordenadas del borrador.</p>}
+              {position && (position.latitude !== Number(draft.latitud) || position.longitude !== Number(draft.longitud)) && <p role="alert" className="alert alert-error">El enlace no coincide con las coordenadas del borrador.</p>}
             </>}
             <p>{draft.latitud}, {draft.longitud}</p>
             <iframe title="Mapa del borrador" src={mapUrl} className="h-64 w-full rounded-xl border-0" loading="lazy" referrerPolicy="no-referrer" />
@@ -229,7 +229,7 @@ export function FieldLocationPage() {
       {!draft && location && (
         <div className="surface-panel space-y-3 p-5">
           <h2 className="font-semibold">Kardex: {location.kardex}</h2>
-          {!message && !location.registro_pendiente && <span className="inline-block rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">Ubicación registrada</span>}
+          {!message && !location.registro_pendiente && <span className="status-badge status-badge-warning">Ubicación registrada</span>}
           {!message && location.registro_pendiente && <p>Este registro está pendiente o requiere revisión. Si tienes el borrador original, reinténtalo; de lo contrario, contacta a un administrador.</p>}
         </div>
       )}
@@ -239,8 +239,8 @@ export function FieldLocationPage() {
           <CameraInput disabled={busy} allowGallery onPhoto={(file) => void capture(file)} />
           <fieldset className="space-y-3">
             <legend className="font-semibold">¿Cómo obtendrás la ubicación?</legend>
-            <label className={`block cursor-pointer rounded-lg border p-4 ${method === 'GPS_DISPOSITIVO' ? 'border-blue-700 bg-blue-50' : 'border-slate-200'}`}><input type="radio" name="method" disabled={busy} checked={method === 'GPS_DISPOSITIVO'} onChange={() => { setMethod('GPS_DISPOSITIVO'); setPosition(null); setSharedUrl(''); setConfirmed(false) }} /> <strong className="font-medium">Capturar ubicación actual</strong><span className="block pl-5 text-sm text-slate-600">Usa el GPS de este dispositivo en el domicilio.</span></label>
-            <label className={`block cursor-pointer rounded-lg border p-4 ${method === 'ENLACE_COMPARTIDO' ? 'border-blue-700 bg-blue-50' : 'border-slate-200'}`}><input type="radio" name="method" disabled={busy} checked={method === 'ENLACE_COMPARTIDO'} onChange={() => { setMethod('ENLACE_COMPARTIDO'); setPosition(null); setConfirmed(false) }} /> <strong className="font-medium">Usar ubicación compartida</strong><span className="block pl-5 text-sm text-slate-600">Pega el enlace recibido del cliente.</span></label>
+            <label className={`block cursor-pointer rounded-xl border p-4 transition-colors ${method === 'GPS_DISPOSITIVO' ? 'border-action bg-blue-50' : 'border-border hover:bg-background'}`}><input type="radio" name="method" disabled={busy} checked={method === 'GPS_DISPOSITIVO'} onChange={() => { setMethod('GPS_DISPOSITIVO'); setPosition(null); setSharedUrl(''); setConfirmed(false) }} /> <strong className="font-medium">Capturar ubicación actual</strong><span className="block pl-5 text-sm text-slate-600">Usa el GPS de este dispositivo en el domicilio.</span></label>
+            <label className={`block cursor-pointer rounded-xl border p-4 transition-colors ${method === 'ENLACE_COMPARTIDO' ? 'border-action bg-blue-50' : 'border-border hover:bg-background'}`}><input type="radio" name="method" disabled={busy} checked={method === 'ENLACE_COMPARTIDO'} onChange={() => { setMethod('ENLACE_COMPARTIDO'); setPosition(null); setConfirmed(false) }} /> <strong className="font-medium">Usar ubicación compartida</strong><span className="block pl-5 text-sm text-slate-600">Pega el enlace recibido del cliente.</span></label>
           </fieldset>
           {method === 'GPS_DISPOSITIVO' && !confirmed && <GpsCapture ref={gpsCapture} disabled={saving} onChange={setPosition} />}
           {method === 'ENLACE_COMPARTIDO' && <div className="space-y-2"><Input label="Enlace GPS compartido" value={sharedUrl} disabled={busy} onChange={(event) => { setSharedUrl(event.target.value); setPosition(null); setConfirmed(false) }} /><Button type="button" variant="secondary" disabled={busy || !sharedUrl} onClick={() => void interpret()}>Interpretar enlace</Button></div>}
@@ -254,7 +254,7 @@ export function FieldLocationPage() {
               <p className="text-xs text-slate-500">El mapa de OpenStreetMap recibe estas coordenadas para mostrar la vista previa.</p>
               <a className="block break-all text-sm text-blue-700 underline" href={googleMapsLink(position.latitude, position.longitude)} target="_blank" rel="noopener noreferrer">{googleMapsLink(position.latitude, position.longitude)}</a>
               {confirmed ? <div className="space-y-2">
-                <p role="status" className="text-sm font-medium text-green-700">Punto confirmado{position.accuracy !== null ? ` · Precisión: ${position.accuracy} m` : ''}.</p>
+                <p role="status" className="text-sm font-semibold text-green-700">Punto confirmado{position.accuracy !== null ? ` · Precisión: ${position.accuracy} m` : ''}.</p>
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => { setConfirmed(false); setPosition(null) }}>
                   {method === 'GPS_DISPOSITIVO' ? 'Buscar otra ubicación' : 'Cambiar ubicación'}
                 </Button>

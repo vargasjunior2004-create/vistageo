@@ -61,7 +61,7 @@ export function ContractsPage() {
   return (
     <div className="space-y-4">
       <h1 className="page-title">Contratos</h1>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
       <form onSubmit={(e) => { e.preventDefault(); if (filter === search && offset === 0) void load(undefined, true); else { deliberateLoad.current = true; setOffset(0); setFilter(search) } }} className="flex flex-wrap items-end gap-2">
         <div className="flex-1"><Input label="Buscar kardex exacto" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <Button type="submit">Buscar</Button>
@@ -74,14 +74,14 @@ export function ContractsPage() {
       </form>
       {loading && !loaded ? <div role="status" aria-label="Cargando contratos"><SkeletonTable rows={5} columns={1} /></div> : (
         <div className="surface-panel overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-slate-600">
+          <table className="data-table min-w-full text-sm">
+            <thead>
               <tr><th className="px-4 py-3">Kardex</th></tr>
             </thead>
             <tbody>
-              {items.length === 0 && !error ? <tr><td className="px-4 py-6 text-center text-slate-500">No se encontraron contratos.</td></tr> : items.map((c) => (
-                <tr key={c.kardex} className="border-t border-slate-100 transition-colors hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">{c.kardex}</td>
+              {items.length === 0 && !error ? <tr><td colSpan={1}><p className="empty-state">No se encontraron contratos.</p></td></tr> : items.map((c) => (
+                <tr key={c.kardex}>
+                  <td className="font-medium">{c.kardex}</td>
                 </tr>
               ))}
             </tbody>

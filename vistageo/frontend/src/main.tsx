@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import { Notifications } from './components/Notifications'
 import { recordCameraEvent } from './services/cameraDiagnostics'
+import '@fontsource-variable/inter/wght.css'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(

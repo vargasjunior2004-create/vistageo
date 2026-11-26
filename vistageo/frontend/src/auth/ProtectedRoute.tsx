@@ -11,8 +11,8 @@ export function ProtectedRoute({ children }: { children: React.JSX.Element }) {
   }
 
   if (error) {
-    return <div role="alert" className="space-y-4 p-6">
-      <p>No se pudo verificar la sesión: {error}. <button onClick={() => void refresh()} className="font-semibold text-blue-700">Reintentar</button></p>
+    return <div role="alert" className="alert alert-error m-6 space-y-4">
+      <p>No se pudo verificar la sesión: {error}. <button onClick={() => void refresh()} className="font-semibold text-action-strong underline">Reintentar</button></p>
       {localStorage.getItem('vistageo_jornada_habilitada') === 'true' && <p><Link className="font-semibold text-blue-700" to="/jornada/camara">Abrir fotos de jornada en este dispositivo</Link></p>}
     </div>
   }

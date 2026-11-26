@@ -170,7 +170,7 @@ export function LocationSearchPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <Link to="/" className="text-sm font-semibold text-blue-700">← Volver al panel</Link>
       <header className="space-y-1">
-        <p className="text-sm font-medium text-[#2f6ecb]">Ubicación oficial</p>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-action-strong">Ubicación oficial</p>
         <h1 className="page-title">Consultar ubicación</h1>
       </header>
       <div className="surface-panel p-5">
@@ -197,7 +197,7 @@ export function LocationSearchPage() {
             <p className="mt-2 text-sm text-slate-600">Registrado por: {selected.creado_por_nombre ?? 'Desconocido'}</p>
             <p className="text-sm text-slate-600">Fecha de registro: {selected.creado_en ? new Date(selected.creado_en).toLocaleString() : 'Desconocida'}</p>
           </div>
-          {selected.registro_pendiente && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Este registro está pendiente o requiere revisión. Contacta a un administrador si no tienes el borrador original.</p>}
+          {selected.registro_pendiente && <p role="status" className="alert alert-warning">Este registro está pendiente o requiere revisión. Contacta a un administrador si no tienes el borrador original.</p>}
           <LocationPhoto key={`${selected.id}-${photoRevision}`} locationId={selected.id} onVersion={setPhotoVersion} />
           {user && (hasPermission('ubicaciones.fotografia.editar') || hasPermission('ubicaciones.gps.editar')) && <UpdateLocation
             key={selected.id}
@@ -213,10 +213,10 @@ export function LocationSearchPage() {
           <p className="text-sm text-slate-600">Precisión estimada: {selected.precision_metros === null ? 'No disponible' : `${selected.precision_metros} m`}</p>
           {selected.capturado_en && <p className="text-sm text-slate-600">Medición del dispositivo: {new Date(selected.capturado_en).toLocaleString()}</p>}
           {selected.url_gps && <p className="break-all text-sm text-slate-600">URL GPS: {selected.url_gps}</p>}
-          {link && <><p className="break-all text-sm text-slate-600">Enlace: {link}</p><a className="inline-block rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a></>}
+          {link && <><p className="break-all text-sm text-slate-600">Enlace: {link}</p><a className="inline-flex min-h-12 items-center rounded-lg bg-action-strong px-4 py-3 font-semibold text-white transition-colors hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action" href={link} target="_blank" rel="noopener noreferrer">Abrir ubicación</a></>}
           <section className="space-y-2 border-t border-slate-100 pt-4">
             <h3 className="font-semibold">Historial de actualizaciones</h3>
-            {revisionError && <p role="alert" className="text-sm text-red-700">{revisionError}</p>}
+            {revisionError && <p role="alert" className="alert alert-error">{revisionError}</p>}
             {revisionLoadingId === selectedId && <div role="status" aria-label="Cargando revisión histórica"><Skeleton className="h-16 w-full rounded-xl" /></div>}
             {registrationRevision && <div className="surface-inset p-3 text-sm">
               <p className="font-semibold">Revisión histórica vinculada</p>
@@ -225,7 +225,7 @@ export function LocationSearchPage() {
               <p>Precisión estimada: {registrationRevision.precision_metros === null ? 'No disponible' : `${registrationRevision.precision_metros} m`}</p>
               {registrationRevision.url_gps && <p className="break-all">Enlace original: {registrationRevision.url_gps}</p>}
             </div>}
-            {historyError && <p role="alert" className="text-sm text-red-700">{historyError}</p>}
+            {historyError && <p role="alert" className="alert alert-error">{historyError}</p>}
             {historyLoading && history.length === 0 && !historyError && <div role="status" aria-label="Cargando historial"><SkeletonCard rows={3} /></div>}
             {!historyLoading && history.length === 0 && !historyError && <p className="text-sm text-slate-600">Aún no hay actualizaciones registradas.</p>}
             <ul className="space-y-2">{history.map((item) =>             <li key={item.id} className="surface-inset p-3 text-sm">
@@ -268,8 +268,8 @@ export function LocationSearchPage() {
             ))}
           </ul>
           {loading && results.length > 0 && <div role="status" aria-label="Cargando más coincidencias"><Skeleton className="h-16 w-full rounded-xl" /></div>}
-          {error && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700"><p>{error}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => { setError(''); setLoading(true); setRetry((value) => value + 1) }}>Reintentar</Button></div>}
-          {!loading && !error && results.length === 0 && <p className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">No se encontraron coincidencias para este kardex.</p>}
+          {error && <div role="alert" className="alert alert-error"><p>{error}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => { setError(''); setLoading(true); setRetry((value) => value + 1) }}>Reintentar</Button></div>}
+          {!loading && !error && results.length === 0 && <p className="empty-state">No se encontraron coincidencias para este kardex.</p>}
           {hasMore && !error && <div ref={sentinel} aria-hidden="true" />}
           {hasMore && !loading && !error && typeof IntersectionObserver === 'undefined' && <Button type="button" variant="secondary" onClick={() => { setLoading(true); setPage((value) => value + 1) }}>Cargar más coincidencias</Button>}
         </section>

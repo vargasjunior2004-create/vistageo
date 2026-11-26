@@ -29,16 +29,16 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[#102c50] text-white">
+        <div className="mb-7 text-center">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-white shadow-sm">
             <Icon name="locations" className="h-6 w-6" />
           </span>
-          <h1 className="mt-4 text-2xl font-semibold tracking-[0.03em] text-[#102c50]">VISTA GEO</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-[0.05em] text-primary">VISTA GEO</h1>
           <p className="mt-1 text-sm text-slate-500">Accede a las ubicaciones de tus clientes</p>
         </div>
-        <form onSubmit={submit} className="surface-panel space-y-5 p-6">
+        <form onSubmit={submit} className="surface-panel space-y-5 p-5 sm:p-7">
           <Input
             label="Usuario"
             value={username}
@@ -47,8 +47,8 @@ export function LoginPage() {
             placeholder="Ingresa tu nombre de usuario"
             required
           />
-          {location.state?.passwordChanged && <p className="text-sm text-blue-700">Contraseña actualizada. Inicia sesión nuevamente.</p>}
-          {location.state?.sessionExpired && <p className="text-sm text-rose-600">La sesión venció o fue revocada. Inicia sesión nuevamente.</p>}
+          {location.state?.passwordChanged && <p className="alert alert-info">Contraseña actualizada. Inicia sesión nuevamente.</p>}
+          {location.state?.sessionExpired && <p className="alert alert-warning">La sesión venció o fue revocada. Inicia sesión nuevamente.</p>}
           <Input
             label="Contraseña"
             type="password"
@@ -59,7 +59,7 @@ export function LoginPage() {
             required
           />
           {error && (
-            <div className="rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600 ring-1 ring-rose-100">
+            <div className="alert alert-error">
               {error}
             </div>
           )}
@@ -67,10 +67,10 @@ export function LoginPage() {
             {loading ? 'Ingresando...' : 'Ingresar'}
           </Button>
         </form>
-        <p className="mt-6 text-center text-xs text-slate-600">
+        <p className="mt-6 text-center text-sm text-text-secondary">
           Solicita tus credenciales al administrador del sistema.
         </p>
-          <span className="mt-4 block text-center text-xs text-slate-600">Version 0.1.0</span>
+          <span className="mt-4 block text-center text-xs text-text-secondary">Version 0.1.0</span>
         {localStorage.getItem('vistageo_jornada_habilitada') === 'true' && (
           <p className="mt-4 text-center text-sm"><Link className="font-semibold text-blue-700" to="/jornada/camara">Abrir fotos de jornada en este dispositivo</Link></p>
         )}

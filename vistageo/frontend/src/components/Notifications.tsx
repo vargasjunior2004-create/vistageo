@@ -6,6 +6,7 @@ export function Notifications() {
     duration={6000}
     closeButton
     richColors
+    expand={false}
     toastOptions={{ closeButtonAriaLabel: 'Cerrar notificación' }}
     containerAriaLabel="Notificaciones"
   />

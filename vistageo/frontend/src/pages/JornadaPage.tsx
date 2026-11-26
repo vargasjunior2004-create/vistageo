@@ -128,11 +128,11 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <header className="space-y-1">
-        <p className="text-sm font-medium text-[#2f6ecb]">Jornada local</p>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-action-strong">Jornada local</p>
         <h1 className="page-title">{mode === 'camera' ? 'Sacar fotos' : 'Mis fotos'}</h1>
         <p className="page-description">Estas fotos permanecen en este dispositivo y no se suben al servidor.</p>
       </header>
-      <div className="flex flex-wrap gap-3 text-sm font-semibold text-blue-800">
+      <div className="flex flex-wrap gap-3 text-sm font-semibold text-primary">
         <Link to="/">Inicio</Link>
         <Link to="/jornada/camara">Sacar fotos</Link>
         <Link to="/jornada/fotos">Mis fotos ({photos.length})</Link>
@@ -151,7 +151,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
           {loadingPhotos && !photosLoaded
             ? <div role="status" aria-label="Cargando fotografía reciente"><SkeletonImage className="h-52 rounded-xl" aspectRatio="4 / 3" /></div>
             : photos[0] && <div className="h-52 overflow-hidden rounded-xl"><PhotoThumbnail photo={photos[0]} /></div>}
-          <p><Link className="font-semibold text-blue-700" to="/jornada/fotos">Ver mis fotos →</Link></p>
+          <p><Link className="font-semibold text-action-strong" to="/jornada/fotos">Ver mis fotos →</Link></p>
         </div>
       ) : (
         <>
@@ -163,7 +163,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
             <Button type="button" disabled={!selected.length} onClick={() => void share()}>Compartir fotos</Button>
           </div>
           {!!selected.length && <p className="text-sm text-slate-600">Las descripciones son opcionales y se incluyen en un reporte numerado. Su recepción depende de la aplicación y del dispositivo.</p>}
-          {photosLoaded && !photos.length && <p className="rounded-2xl bg-white p-5 text-slate-600">Todavía no hay fotos. Abre la cámara para empezar.</p>}
+          {photosLoaded && !photos.length && <p className="empty-state">Todavía no hay fotos. Abre la cámara para empezar.</p>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {loadingPhotos && !photosLoaded
               ? Array.from({ length: 8 }, (_, index) => <SkeletonImage key={index} className="h-36 rounded-xl border border-slate-200" aspectRatio="1 / 1" />)
@@ -181,7 +181,7 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
                 {selected.includes(photo.id) && <label className="block px-3 pb-3 text-xs font-medium text-slate-700">
                   Descripción opcional · Foto {selectedPhotos.findIndex((item) => item.id === photo.id) + 1}
                   <textarea
-                    className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900 focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15"
+                    className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text-primary focus:border-action focus:outline-none focus:ring-2 focus:ring-action/15"
                     rows={2}
                     value={descriptions[photo.id] ?? ''}
                     onChange={(event) => setDescriptions((current) => ({ ...current, [photo.id]: event.target.value }))}
@@ -190,8 +190,8 @@ export function JornadaPage({ mode }: { mode: 'camera' | 'gallery' }) {
               </div>
             ))}
           </div>
-          {preview && <div role="dialog" aria-modal="true" aria-label="Vista de fotografía" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4">
-            <div className="w-full max-w-2xl space-y-3 rounded-2xl bg-white p-3">
+          {preview && <div role="dialog" aria-modal="true" aria-label="Vista de fotografía" className="photo-preview-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="photo-preview-dialog space-y-3 p-3">
               <div className="h-[60vh] overflow-hidden rounded-xl"><PhotoThumbnail photo={preview} contain /></div>
               <Button type="button" onClick={() => setPreview(null)}>Cerrar</Button>
             </div>

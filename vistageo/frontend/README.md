@@ -49,6 +49,8 @@ datos automáticamente.
 
 ## Notas
 
+- La identidad visual usa los tokens de color y los estilos compartidos de
+  `src/index.css`; los iconos de navegación se implementan con Lucide React.
 - Los placeholders reutilizables están en `src/components/Skeleton.tsx`:
   `Skeleton`, `SkeletonText`, `SkeletonCard`, `SkeletonTable`, `SkeletonAvatar`,
   `SkeletonImage` y `SkeletonDashboard`. Las pantallas muestran skeletons en la

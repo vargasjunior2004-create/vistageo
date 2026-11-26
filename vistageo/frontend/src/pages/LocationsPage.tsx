@@ -96,7 +96,7 @@ export function LocationsPage() {
   return (
     <div className="space-y-4">
       <h1 className="page-title">Ubicaciones</h1>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
       <form onSubmit={(e) => { e.preventDefault(); setSelected(null); if (filter === search && offset === 0) void load(undefined, true); else { deliberateLoad.current = true; setOffset(0); setFilter(search) } }} className="flex flex-wrap items-end gap-2">
         <div className="flex-1"><Input label="Buscar kardex exacto" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <Button type="submit">Buscar</Button>
@@ -112,11 +112,11 @@ export function LocationsPage() {
         {Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} rows={2} />)}
       </div> : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {locations.length === 0 && !error ? <p className="col-span-full rounded-xl bg-white p-5 text-slate-600">No se encontraron ubicaciones.</p> : locations.map((loc) => (
+          {locations.length === 0 && !error ? <p className="empty-state col-span-full">No se encontraron ubicaciones.</p> : locations.map((loc) => (
             <button
               key={loc.id}
               onClick={() => { setPhotoVersion(null); setSelected(loc) }}
-              className={`rounded-xl border p-4 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected?.id === loc.id ? 'border-[#2f6ecb] bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+              className={`rounded-xl border p-4 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action ${selected?.id === loc.id ? 'border-action bg-blue-50' : 'border-border bg-surface hover:bg-background'}`}
             >
               <p className="font-semibold text-slate-900">#{loc.id}</p>
               <p className="text-sm text-slate-600">{loc.kardex}</p>

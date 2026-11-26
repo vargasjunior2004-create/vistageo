@@ -150,12 +150,12 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
   }
 
   if (loading) return <div role="status" aria-label="Comprobando actualizaciones pendientes"><SkeletonText lines={2} /></div>
-  if (draftsUnavailable) return <p role="alert" className="text-sm text-red-700">{error}</p>
+  if (draftsUnavailable) return <p role="alert" className="alert alert-error">{error}</p>
   return <section className="space-y-3 border-t border-slate-100 pt-4">
-    {message && <p role="status" className="text-sm text-blue-800">{message}</p>}
-    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    {message && <p role="status" className="alert alert-info">{message}</p>}
+    {error && <p role="alert" className="alert alert-error">{error}</p>}
     {draft ? <>
-      <p className="text-sm text-amber-800">Hay una actualización pendiente. Reintenta con los mismos datos.</p>
+      <p className="alert alert-warning">Hay una actualización pendiente. Reintenta con los mismos datos.</p>
       <Button type="button" disabled={busy} onClick={() => void submit(draft)}>Reintentar actualización</Button>
       {canDiscard && <Button type="button" variant="secondary" disabled={busy} onClick={() => {
         setBusy(true)
@@ -165,7 +165,7 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
           .finally(() => setBusy(false))
       }}>Descartar borrador desactualizado</Button>}
     </> : legacy && !editing ? <>
-      <p className="text-sm text-amber-800">Hay un reemplazo anterior pendiente. Reintenta su limpieza o complétalo seleccionando un motivo.</p>
+      <p className="alert alert-warning">Hay un reemplazo anterior pendiente. Reintenta su limpieza o complétalo seleccionando un motivo.</p>
       <Button type="button" variant="secondary" disabled={busy} onClick={() => void retryLegacy()}>Reintentar reemplazo anterior</Button>{' '}
       {canPhoto && <Button type="button" disabled={busy} onClick={() => void open()}>Completar con motivo</Button>}
     </> : editing ? <>
@@ -177,13 +177,13 @@ export function UpdateLocation({ userId, location, photoVersion, canPhoto, canGp
         ? <GpsCapture disabled={busy} onChange={setPosition} />
         : <Button type="button" variant="secondary" disabled={busy} onClick={() => setCapturingGps(true)}>Capturar nueva ubicación GPS</Button>)}
       <label className="block text-sm font-medium text-slate-700">Motivo de actualización
-        <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15" required>
+        <select value={reasonId} onChange={(event) => setReasonId(event.target.value)} className="mt-1 block min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:border-action focus:outline-none focus:ring-2 focus:ring-action/15" required>
           <option value="">Selecciona un motivo</option>{reasons.map((reason) => <option key={reason.id} value={reason.id}>{reason.nombre}</option>)}
         </select>
       </label>
-      {reasons.length === 0 && <p className="text-sm text-amber-800">No hay motivos activos. Solicita uno a un administrador.</p>}
+      {reasons.length === 0 && <p className="alert alert-warning">No hay motivos activos. Solicita uno a un administrador.</p>}
       <label className="block text-sm font-medium text-slate-700">Observación opcional
-        <textarea value={observation} maxLength={2000} onChange={(event) => setObservation(event.target.value)} className="mt-1 block min-h-24 w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-[#2f6ecb] focus:outline-none focus:ring-2 focus:ring-[#2f6ecb]/15" />
+        <textarea value={observation} maxLength={2000} onChange={(event) => setObservation(event.target.value)} className="mt-1 block min-h-24 w-full rounded-lg border border-border bg-surface p-3 text-sm focus:border-action focus:outline-none focus:ring-2 focus:ring-action/15" />
       </label>
       <div className="flex flex-wrap gap-2"><Button type="button" disabled={busy || !reasonId || (!photo && !position && !legacy) || (!!position && !position.acceptable)} onClick={() => void confirm()}>Guardar actualización</Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => { setEditing(false); setPhoto(''); setPosition(null); setCapturingGps(false); setError('') }}>Cancelar</Button></div>
